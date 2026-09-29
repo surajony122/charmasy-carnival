@@ -43,7 +43,9 @@ export const loader = async ({ request }) => {
   }
 
   const url = new URL(request.url);
-  const orderId = url.searchParams.get("order_id") || "TEST_ORDER";
+  const rawOrderId = (url.searchParams.get("order_id") || "").trim();
+  const orderId = rawOrderId !== "" ? rawOrderId : ("PLAY_" + Math.floor(1000 + Math.random() * 9000));
+  const orderBadgeText = rawOrderId !== "" ? `ORDER #${rawOrderId}` : `CARNIVAL PLAYER`;
   const customerId = url.searchParams.get("customer_id") || url.searchParams.get("logged_in_customer_id") || "";
   const gameParam = url.searchParams.get("game");
 
@@ -519,7 +521,7 @@ export const loader = async ({ request }) => {
               <div class="phone-top-notch"></div>
               <div class="phone-screen-header">
                 <div class="phone-screen-title" id="phone-game-title">CHARMACY CLAW</div>
-                <div class="phone-screen-order">ORDER #${orderId}</div>
+                <div class="phone-screen-order">${orderBadgeText}</div>
               </div>
 
               <!-- Interactive Game Arena -->

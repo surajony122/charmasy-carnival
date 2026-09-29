@@ -10,13 +10,19 @@ function Extension() {
   const rawOrderId = confirmation?.order?.id || '';
   const orderNumber = confirmation?.number || '';
 
+  const orderObj = shopify.order?.value || shopify.order?.current || shopify.order;
+  const directOrderId = orderObj?.id || '';
+  const directOrderName = orderObj?.name || '';
+
   let orderIdParam = '';
   if (rawOrderId && typeof rawOrderId === 'string') {
     orderIdParam = rawOrderId.split('/').pop();
   } else if (orderNumber) {
     orderIdParam = String(orderNumber);
-  } else if (typeof shopify.order?.id === 'string' && shopify.order.id) {
-    orderIdParam = shopify.order.id.split('/').pop();
+  } else if (directOrderName) {
+    orderIdParam = directOrderName.replace('#', '');
+  } else if (directOrderId && typeof directOrderId === 'string') {
+    orderIdParam = directOrderId.split('/').pop();
   } else {
     orderIdParam = 'ORDER_' + Date.now();
   }
