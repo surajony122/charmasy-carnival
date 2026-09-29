@@ -21,9 +21,17 @@ function Extension() {
     orderIdParam = 'ORDER_' + Date.now();
   }
 
+  const customerId = shopify.buyerIdentity?.customer?.id?.value 
+    || shopify.buyerIdentity?.customer?.id 
+    || shopify.customer?.id?.value 
+    || shopify.customer?.id 
+    || '';
+  const customerIdParam = customerId ? customerId.split('/').pop() : '';
+  const customerQuery = customerIdParam ? `&customer_id=${customerIdParam}` : '';
+
   const storefrontUrl = shopify.shop?.storefrontUrl?.value || shopify.shop?.storefrontUrl || "https://ravistore-shop.myshopify.com";
   const baseUrl = storefrontUrl.replace(/\/$/, "");
-  const gameUrl = `${baseUrl}/apps/carnival-games?order_id=${orderIdParam}`;
+  const gameUrl = `${baseUrl}/apps/carnival-games?order_id=${orderIdParam}${customerQuery}`;
 
   return (
     <s-banner heading="Charmacy Carnival is LIVE!" tone="success">

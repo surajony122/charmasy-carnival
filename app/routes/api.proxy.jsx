@@ -12,6 +12,7 @@ export const action = async ({ request }) => {
   try {
     const formData = await request.formData();
     const orderId = formData.get("orderId");
+    const customerId = formData.get("customerId");
     const won = formData.get("won") === "true";
     const prizeType = formData.get("prizeType");
     const prizeValue = formData.get("prizeValue");
@@ -21,8 +22,8 @@ export const action = async ({ request }) => {
 
     await prisma.gamePlay.upsert({
       where: { orderId },
-      update: { won, prizeType, prizeValue, gameId, playedAt: new Date() },
-      create: { shop, orderId, gameId, won, prizeType, prizeValue },
+      update: { won, prizeType, prizeValue, gameId, customerId: customerId || undefined, playedAt: new Date() },
+      create: { shop, orderId, customerId: customerId || null, gameId, won, prizeType, prizeValue },
     });
 
     return json({ success: true });
@@ -43,6 +44,7 @@ export const loader = async ({ request }) => {
 
   const url = new URL(request.url);
   const orderId = url.searchParams.get("order_id") || "TEST_ORDER";
+  const customerId = url.searchParams.get("customer_id") || url.searchParams.get("logged_in_customer_id") || "";
   const gameParam = url.searchParams.get("game");
 
   const today = new Date();
@@ -568,6 +570,7 @@ export const loader = async ({ request }) => {
       <!-- Pure Native High-Performance 60FPS Game Controller (Zero Babel, Zero Runtime Lag) -->
       <script>
         const ORDER_ID = "${orderId}";
+        const CUSTOMER_ID = "${customerId}";
         const INITIAL_GAME = ${initialGameId};
 
         const GAMES_DATA = [
@@ -670,6 +673,7 @@ export const loader = async ({ request }) => {
         function recordResult(won, prize) {
           const fd = new FormData();
           fd.append("orderId", ORDER_ID);
+          fd.append("customerId", CUSTOMER_ID);
           fd.append("gameId", currentGameId);
           fd.append("won", won ? "true" : "false");
           if (prize) {
