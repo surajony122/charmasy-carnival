@@ -77,6 +77,24 @@ export const loader = async ({ request }) => {
   const activeGameId = (settings && settings.activeGameId) ? settings.activeGameId : todayGame;
   const initialGameId = gameParam ? parseInt(gameParam, 10) : activeGameId;
 
+  const gamesList = [
+    { id: 1, tabName: "12 CHARMAC" },
+    { id: 2, tabName: "13 SPIN" },
+    { id: 3, tabName: "14 CATCH" },
+    { id: 4, tabName: "15 FINISH" },
+    { id: 5, tabName: "16 FIND" },
+    { id: 6, tabName: "17 TAP" },
+    { id: 7, tabName: "18 BIRTHDA" },
+    { id: 8, tabName: "19 UNLOCK" },
+    { id: 9, tabName: "20 GOLDEN" },
+  ];
+
+  const preRenderedTabsHtml = gamesList.map(g => {
+    const isLocked = g.id !== activeGameId;
+    const isActive = g.id === initialGameId;
+    return `<button class="game-tab-btn${isActive ? ' active' : ''}${isLocked ? ' tab-locked' : ''}" data-id="${g.id}" onclick="switchGame(${g.id})">${isLocked ? '<span class="tab-lock-icon">🔒</span> ' : ''}${g.tabName}</button>`;
+  }).join('');
+
   const html = `{% layout none %}
     <!DOCTYPE html>
     <html lang="en">
@@ -702,7 +720,9 @@ export const loader = async ({ request }) => {
             <div class="slide-title-row">
               <span class="slide-date-tag" id="slide-date-display">12 OCT</span>
               <h1 class="slide-main-title" id="slide-title-display">CHARMACY CLAW</h1>
-              ${isTestMode ? '<span class="mode-indicator-pill mode-test">🟢 Test Mode: All Games Active</span>' : '<span class="mode-indicator-pill mode-customer">🔒 Customer 24H Mode</span>'}
+              <button class="mode-indicator-pill ${isTestMode ? 'mode-test' : 'mode-customer'}" id="mode-badge-toggle" onclick="toggleTestModeClient()" title="Click to toggle Test Mode / Customer Mode" style="cursor:pointer;border:none;">
+                ${isTestMode ? '🟢 Test Mode (Click to Preview Customer)' : '🔒 Customer 24H Mode (Click to Enable Test)'}
+              </button>
             </div>
             <p class="slide-tagline" id="slide-tagline-display">A fast luck-based opener: position the claw, tap to drop, and try to pick a Charmacy prize.</p>
           </div>
@@ -711,7 +731,7 @@ export const loader = async ({ request }) => {
 
         <!-- The 9-Game Mix Tabs (Positioned directly below heading section) -->
         <div class="game-tabs-row" id="game-tabs-container">
-          <!-- Tabs rendered dynamically -->
+          ${preRenderedTabsHtml}
         </div>
 
         <!-- 3-Column Grid Layout -->
@@ -796,7 +816,7 @@ export const loader = async ({ request }) => {
             id: 1, date: "12 OCT", tabName: "12 CHARMAC", title: "CHARMACY CLAW", type: "LUCK", color: "#6B2237",
             tagline: "A fast luck-based opener: position the claw, tap to drop, and try to pick a Charmacy prize.",
             howItWorks: "1. User moves the claw left / right.\\n2. Tap drops the claw.\\n3. Claw either misses or picks a product / prize.",
-            winnerLogic: "Only 6 prize outcomes are available for the day. Winning positions are server-controlled; all other plays can show a \\"come back tomorrow\\" result.",
+            winnerLogic: "Only 6 prize outcomes are available for the day. Winning positions are server-controlled; all other plays can show a 'come back tomorrow' result.",
             prizes: "3 × 5% OFF Coupon • 2 × 10% OFF Coupon • 1 × Free Gift – Stellar Eyeliner",
             claimLogic: "Coupon codes delivered instantly. Free Gift (Stellar Eyeliner) unlocks with any valid Carnival order placed the same day.",
             whyEarns: "Visually strong launch-day mechanic. The uncertainty makes even non-winning plays feel fun.",
@@ -806,7 +826,7 @@ export const loader = async ({ request }) => {
             id: 2, date: "13 OCT", tabName: "13 SPIN", title: "SPIN THE GLAM WHEEL", type: "LUCK", color: "#B8860B",
             tagline: "One spin, multiple possibilities — but only six valuable outcomes are actually released.",
             howItWorks: "1. User taps SPIN.\\n2. Wheel rotates through prize / non-prize segments.\\n3. Winning users receive a unique reward code / prize claim.",
-            winnerLogic: "Server controls the six winning outcomes. \\"Try again tomorrow\\" / non-prize segments can remain visible so the wheel still feels dynamic.",
+            winnerLogic: "Server controls the six winning outcomes. 'Try again tomorrow' / non-prize segments can remain visible so the wheel still feels dynamic.",
             prizes: "2 × ₹50 OFF Coupon • 2 × 5% OFF Coupon • 1 × 10% OFF Coupon • 1 × Free Gift – Stellar Eyeliner",
             claimLogic: "Coupon winners receive codes immediately. Free Gift (Stellar Eyeliner) unlocks with any valid Carnival order placed today.",
             whyEarns: "Customers instantly understand a wheel. Each prize is single-use and time-bound, so it never becomes a sitewide discount.",
@@ -1731,8 +1751,8 @@ export const loader = async ({ request }) => {
         let countdownTimer = null;
 
         function isGameLocked(id) {
-          if (IS_TEST_MODE) return false;
-          return id > ACTIVE_GAME_ID;
+          if (id === ACTIVE_GAME_ID) return false;
+          return true;
         }
 
         function renderLockedScreen(id, data) {
@@ -1771,6 +1791,7 @@ export const loader = async ({ request }) => {
               <div class="locked-action-box">
                 <p class="locked-note">✨ Today's game is active and waiting for you!</p>
                 <button class="btn-switch-active" onclick="switchGame(\${ACTIVE_GAME_ID})">PLAY TODAY'S ACTIVE GAME</button>
+                \${IS_TEST_MODE ? \`<button class="btn-test-unlock" onclick="LAUNCHERS[\${id}]()" style="background:transparent;border:1.5px dashed #6B2237;color:#6B2237;border-radius:20px;padding:8px 16px;font-size:11px;font-weight:800;cursor:pointer;margin-top:8px;">⚡ [TEST MODE] LAUNCH GAME ANYWAY</button>\` : ''}
               </div>
             </div>
           \`;
@@ -1870,22 +1891,41 @@ export const loader = async ({ request }) => {
           }
         }
 
-        // Render Tabs
-        const tabsContainer = document.getElementById("game-tabs-container");
-        tabsContainer.innerHTML = "";
-        GAMES_DATA.forEach(g => {
-          const locked = isGameLocked(g.id);
-          const btn = document.createElement("button");
-          btn.className = "game-tab-btn" + 
-            (g.id === currentGameId ? " active" : "") + 
-            (locked ? " tab-locked" : "");
-          btn.setAttribute("data-id", g.id);
-          btn.innerHTML = (locked ? '<span class="tab-lock-icon">🔒</span> ' : '') + g.tabName;
-          btn.onclick = () => switchGame(g.id);
-          tabsContainer.appendChild(btn);
-        });
+        function renderTabs() {
+          const tabsContainer = document.getElementById("game-tabs-container");
+          if (!tabsContainer) return;
+          tabsContainer.innerHTML = "";
+          GAMES_DATA.forEach(g => {
+            const locked = isGameLocked(g.id);
+            const btn = document.createElement("button");
+            btn.className = "game-tab-btn" + 
+              (g.id === currentGameId ? " active" : "") + 
+              (locked ? " tab-locked" : "");
+            btn.setAttribute("data-id", g.id);
+            btn.innerHTML = (locked ? '<span class="tab-lock-icon">🔒</span> ' : '') + g.tabName;
+            btn.onclick = () => switchGame(g.id);
+            tabsContainer.appendChild(btn);
+          });
+        }
 
-        // Initialize First Game
+        function toggleTestModeClient() {
+          IS_TEST_MODE = !IS_TEST_MODE;
+          const badge = document.getElementById("mode-badge-toggle");
+          if (badge) {
+            if (IS_TEST_MODE) {
+              badge.className = "mode-indicator-pill mode-test";
+              badge.innerHTML = "🟢 Test Mode (Click to Preview Customer)";
+            } else {
+              badge.className = "mode-indicator-pill mode-customer";
+              badge.innerHTML = "🔒 Customer 24H Mode (Click to Enable Test)";
+            }
+          }
+          renderTabs();
+          switchGame(currentGameId);
+        }
+
+        // Render Tabs & Initialize First Game
+        renderTabs();
         switchGame(currentGameId);
       </script>
     </body>
