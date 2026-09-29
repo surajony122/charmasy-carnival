@@ -49,12 +49,33 @@ export const loader = async ({ request }) => {
   const customerId = url.searchParams.get("customer_id") || url.searchParams.get("logged_in_customer_id") || "";
   const gameParam = url.searchParams.get("game");
 
+  let settings = null;
+  try {
+    settings = (await prisma.gameSettings.findUnique({ where: { shop } })) || (await prisma.gameSettings.findFirst());
+  } catch (e) {
+    console.error("Failed to query gameSettings:", e);
+  }
+
   const today = new Date();
   const month = today.getMonth() + 1;
   const day = today.getDate();
-  let todayGame = null;
-  if (month === 10 && day >= 12 && day <= 20) todayGame = day - 11;
-  const initialGameId = gameParam ? parseInt(gameParam, 10) : (todayGame || 1);
+  let todayGame = 1;
+  if (month === 10 && day >= 12 && day <= 20) {
+    todayGame = day - 11;
+  }
+
+  const testParam = url.searchParams.get("test");
+  let isTestMode = true; // default to true if no settings yet
+  if (testParam === "1") {
+    isTestMode = true;
+  } else if (testParam === "0") {
+    isTestMode = false;
+  } else if (settings && typeof settings.testMode === "boolean") {
+    isTestMode = settings.testMode;
+  }
+
+  const activeGameId = (settings && settings.activeGameId) ? settings.activeGameId : todayGame;
+  const initialGameId = gameParam ? parseInt(gameParam, 10) : activeGameId;
 
   const html = `{% layout none %}
     <!DOCTYPE html>
@@ -92,7 +113,7 @@ export const loader = async ({ request }) => {
           display: flex;
           flex-direction: column;
           align-items: center;
-          padding: 16px 12px 100px;
+          padding: 16px 12px 30px;
         }
 
         /* ===== FULL SLIDE PRESENTATION WRAPPER (PDF 1:1) ===== */
@@ -360,53 +381,245 @@ export const loader = async ({ request }) => {
           .guardrail-pill.unlock-banner { margin-left: 0; width: 100%; text-align: center; }
         }
 
-        /* The 9-Game Mix Tabs (PDF 1:1) */
+        /* The 9-Game Mix Tabs (Positioned directly below heading) */
         .game-tabs-row {
           display: grid;
           grid-template-columns: repeat(9, 1fr);
           gap: 8px;
+          margin-bottom: 20px;
+          width: 100%;
         }
 
         @media (max-width: 1080px) {
           .game-tabs-row {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: #FFFFFF;
-            padding: 8px 10px;
-            box-shadow: 0 -4px 20px rgba(107,34,55,0.1);
             display: flex;
             overflow-x: auto;
-            z-index: 500;
-            margin: 0;
+            gap: 8px;
+            padding: 4px 2px 10px;
+            margin-bottom: 16px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
           }
           .game-tab-btn {
             flex: 0 0 auto;
-            min-width: 85px;
+            min-width: 95px;
           }
         }
 
         .game-tab-btn {
           background: #EFE4D6;
-          border: none;
+          border: 1.5px solid transparent;
           border-radius: 8px;
           padding: 10px 4px;
           text-align: center;
           cursor: pointer;
-          font-size: 10px;
+          font-size: 11px;
           font-weight: 800;
-          letter-spacing: 1px;
+          letter-spacing: 0.8px;
           text-transform: uppercase;
           color: var(--text-dark);
-          transition: all 0.15s;
+          transition: all 0.15s ease-out;
           line-height: 1.2;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 4px;
+        }
+
+        .game-tab-btn:hover {
+          background: #E6D7C3;
         }
 
         .game-tab-btn.active {
           background: var(--burgundy);
           color: #FFFFFF;
+          border-color: var(--burgundy);
           box-shadow: 0 4px 12px rgba(107,34,55,0.25);
+        }
+
+        .game-tab-btn.tab-locked {
+          opacity: 0.72;
+          background: #E8DEC0;
+          border: 1px dashed #C8B99D;
+        }
+
+        .game-tab-btn.tab-locked.active {
+          opacity: 1;
+          background: #843247;
+          border-color: #6B2237;
+          color: #FFFFFF;
+        }
+
+        .tab-lock-icon {
+          font-size: 10px;
+        }
+
+        .mode-indicator-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          font-weight: 800;
+          padding: 4px 10px;
+          border-radius: 20px;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+        }
+
+        .mode-test {
+          background: #E8F4EC;
+          color: #2D6A4F;
+          border: 1px solid #B7E4C7;
+        }
+
+        .mode-customer {
+          background: #FCF5E8;
+          color: #B8860B;
+          border: 1px solid #F5E0B7;
+        }
+
+        /* ===== LOCKED COUNTDOWN ARENA CARD ===== */
+        .locked-countdown-card {
+          width: 100%;
+          height: 100%;
+          min-height: 380px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 24px 16px;
+          text-align: center;
+          background: linear-gradient(180deg, #FFFFFF 0%, #FAF5EE 100%);
+          border-radius: 16px;
+          animation: popIn 0.25s ease-out;
+        }
+
+        .locked-badge-pill {
+          background: #6B2237;
+          color: #FFFFFF;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 1.5px;
+          padding: 4px 12px;
+          border-radius: 20px;
+          text-transform: uppercase;
+          margin-bottom: 12px;
+        }
+
+        .locked-icon-anim {
+          font-size: 40px;
+          margin-bottom: 8px;
+          animation: pulseLock 2s infinite ease-in-out;
+        }
+
+        @keyframes pulseLock {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.12); }
+        }
+
+        .locked-title {
+          font-family: 'DM Sans', sans-serif;
+          font-size: 17px;
+          font-weight: 800;
+          color: var(--burgundy);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 6px;
+        }
+
+        .locked-subtitle {
+          font-size: 12px;
+          color: var(--text-muted);
+          font-weight: 500;
+          margin-bottom: 20px;
+          max-width: 250px;
+          line-height: 1.4;
+        }
+
+        .countdown-clock-wrapper {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          margin-bottom: 20px;
+        }
+
+        .countdown-box {
+          background: #FFFFFF;
+          border: 2px solid #EBDDCB;
+          border-radius: 10px;
+          padding: 10px 8px;
+          min-width: 62px;
+          box-shadow: 0 4px 12px rgba(107,34,55,0.06);
+        }
+
+        .clock-num {
+          font-size: 22px;
+          font-weight: 800;
+          color: var(--burgundy);
+          font-variant-numeric: tabular-nums;
+          line-height: 1;
+        }
+
+        .clock-lbl {
+          font-size: 9px;
+          font-weight: 800;
+          color: var(--text-muted);
+          letter-spacing: 0.8px;
+          margin-top: 4px;
+          text-transform: uppercase;
+        }
+
+        .clock-sep {
+          font-size: 20px;
+          font-weight: 800;
+          color: var(--burgundy);
+          animation: blinkSep 1s infinite;
+        }
+
+        @keyframes blinkSep {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.25; }
+        }
+
+        .locked-action-box {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+        }
+
+        .locked-note {
+          font-size: 11px;
+          color: #2D6A4F;
+          font-weight: 700;
+        }
+
+        .btn-switch-active {
+          background: var(--burgundy);
+          color: #FFFFFF;
+          border: none;
+          border-radius: 25px;
+          padding: 10px 18px;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.8px;
+          cursor: pointer;
+          transition: all 0.2s;
+          box-shadow: 0 4px 14px rgba(107,34,55,0.25);
+        }
+
+        .btn-switch-active:hover {
+          background: var(--burgundy-dark);
+          transform: translateY(-1px);
+        }
+
+        .btn-game-action.disabled {
+          background: #D2C4B5 !important;
+          color: #7B6858 !important;
+          cursor: not-allowed !important;
+          box-shadow: none !important;
         }
 
         /* ===== WIN / LOSE POPUP MODAL ===== */
@@ -489,10 +702,16 @@ export const loader = async ({ request }) => {
             <div class="slide-title-row">
               <span class="slide-date-tag" id="slide-date-display">12 OCT</span>
               <h1 class="slide-main-title" id="slide-title-display">CHARMACY CLAW</h1>
+              ${isTestMode ? '<span class="mode-indicator-pill mode-test">🟢 Test Mode: All Games Active</span>' : '<span class="mode-indicator-pill mode-customer">🔒 Customer 24H Mode</span>'}
             </div>
             <p class="slide-tagline" id="slide-tagline-display">A fast luck-based opener: position the claw, tap to drop, and try to pick a Charmacy prize.</p>
           </div>
           <div class="slide-type-badge" id="slide-type-display">LUCK</div>
+        </div>
+
+        <!-- The 9-Game Mix Tabs (Positioned directly below heading section) -->
+        <div class="game-tabs-row" id="game-tabs-container">
+          <!-- Tabs rendered dynamically -->
         </div>
 
         <!-- 3-Column Grid Layout -->
@@ -561,11 +780,6 @@ export const loader = async ({ request }) => {
             <div class="guardrail-pill">PURCHASE = BONUS PLAY</div>
             <div class="guardrail-pill unlock-banner">CATALOG: 5% / 10% / ₹50 / ₹100 + STELLAR EYELINER</div>
           </div>
-
-          <!-- The 9-Game Mix Tabs -->
-          <div class="game-tabs-row" id="game-tabs-container">
-            <!-- Tabs rendered dynamically -->
-          </div>
         </div>
       </div>
 
@@ -574,10 +788,12 @@ export const loader = async ({ request }) => {
         const ORDER_ID = "${orderId}";
         const CUSTOMER_ID = "${customerId}";
         const INITIAL_GAME = ${initialGameId};
+        const IS_TEST_MODE = ${isTestMode ? "true" : "false"};
+        const ACTIVE_GAME_ID = ${activeGameId};
 
         const GAMES_DATA = [
           {
-            id: 1, date: "12 OCT", tabName: "12 CLAW", title: "CHARMACY CLAW", type: "LUCK", color: "#6B2237",
+            id: 1, date: "12 OCT", tabName: "12 CHARMAC", title: "CHARMACY CLAW", type: "LUCK", color: "#6B2237",
             tagline: "A fast luck-based opener: position the claw, tap to drop, and try to pick a Charmacy prize.",
             howItWorks: "1. User moves the claw left / right.\\n2. Tap drops the claw.\\n3. Claw either misses or picks a product / prize.",
             winnerLogic: "Only 6 prize outcomes are available for the day. Winning positions are server-controlled; all other plays can show a \\"come back tomorrow\\" result.",
@@ -607,7 +823,7 @@ export const loader = async ({ request }) => {
             guardrail: "Use anti-bot / score validation. Limit attempts per account/device so the leaderboard stays fair."
           },
           {
-            id: 4, date: "15 OCT", tabName: "15 SHADE", title: "PICK THE RIGHT SHADE", type: "BEAUTY", color: "#7B5EA7",
+            id: 4, date: "15 OCT", tabName: "15 FINISH", title: "PICK THE RIGHT SHADE", type: "BEAUTY", color: "#7B5EA7",
             tagline: "A quick beauty-knowledge game: choose the best shade match from four options.",
             howItWorks: "1. Show a model / undertone / shade clue.\\n2. User picks 1 of 4 swatches.\\n3. Correct answer qualifies the user for the day's draw.",
             winnerLogic: "Select 6 winners from valid correct entries after the day closes. This keeps the game easy and avoids rewarding every correct answer.",
@@ -617,7 +833,7 @@ export const loader = async ({ request }) => {
             guardrail: "One qualifying entry per customer. Keep coupon codes single-use per customer."
           },
           {
-            id: 5, date: "16 OCT", tabName: "16 MIRROR", title: "MIRROR MATCH", type: "MEMORY", color: "#5A5AA0",
+            id: 5, date: "16 OCT", tabName: "16 FIND", title: "MIRROR MATCH", type: "MEMORY", color: "#5A5AA0",
             tagline: "Flip the vanity cards, match Charmacy product pairs, and finish before the timer runs out.",
             howItWorks: "1. Cards begin face-down.\\n2. User flips two at a time to find matching beauty pairs.\\n3. Complete the board as fast as possible.",
             winnerLogic: "Fastest 6 valid completed boards win. Time starts at first card flip and stops after the final match.",
@@ -647,7 +863,7 @@ export const loader = async ({ request }) => {
             guardrail: "Pre-cap Cart On Us exposure (suggested max ₹9,000 total). Vary the hourly reward through the day; coupon value and Free Gift landed cost both count toward finance approval."
           },
           {
-            id: 8, date: "19 OCT", tabName: "19 SCRATCH", title: "SCRATCH AND WIN CARD GAME", type: "LUCK", color: "#8B6914",
+            id: 8, date: "19 OCT", tabName: "19 UNLOCK", title: "SCRATCH AND WIN CARD GAME", type: "LUCK", color: "#8B6914",
             tagline: "Scratch the digital card to instantly reveal today's Carnival reward.",
             howItWorks: "1. User taps and drags a finger across the card.\\n2. The scratch animation clears to reveal a reward.\\n3. Winning cards show a coupon code or Free Gift claim; others show 'come back tomorrow.'",
             winnerLogic: "Only 6 winning cards are released for the day. Winning cards are server-controlled; all other scratches show a 'come back tomorrow' result.",
@@ -657,7 +873,7 @@ export const loader = async ({ request }) => {
             guardrail: "No blanket discount. Cap exactly 6 winning cards; keep coupon codes single-use and time-bound."
           },
           {
-            id: 9, date: "20 OCT", tabName: "20 PUZZLE", title: "BEAUTY WORD PUZZLE", type: "PUZZLE", color: "#4A3580",
+            id: 9, date: "20 OCT", tabName: "20 GOLDEN", title: "BEAUTY WORD PUZZLE", type: "PUZZLE", color: "#4A3580",
             tagline: "Finale day: find every hidden beauty word in the grid before the timer runs out.",
             howItWorks: "1. User is shown a grid with beauty / Charmacy words hidden inside.\\n2. Tap / drag to circle each word found from the list.\\n3. Complete the full word list as fast as possible to qualify.",
             winnerLogic: "Among valid completed puzzles, the 6 fastest correct completions win. Tie-breaker: earliest time the puzzle was submitted.",
@@ -1512,10 +1728,102 @@ export const loader = async ({ request }) => {
         // ============================================================
         const LAUNCHERS = [null, launchGame1, launchGame2, launchGame3, launchGame4, launchGame5, launchGame6, launchGame7, launchGame8, launchGame9];
 
+        let countdownTimer = null;
+
+        function isGameLocked(id) {
+          if (IS_TEST_MODE) return false;
+          return id > ACTIVE_GAME_ID;
+        }
+
+        function renderLockedScreen(id, data) {
+          if (countdownTimer) {
+            clearInterval(countdownTimer);
+            countdownTimer = null;
+          }
+
+          const arena = document.getElementById("game-arena");
+          const mainActionBtn = document.getElementById("main-action-btn");
+
+          arena.innerHTML = \`
+            <div class="locked-countdown-card">
+              <div class="locked-badge-pill">🔒 CARNIVAL SCHEDULE</div>
+              <div class="locked-icon-anim">⏳</div>
+              <h3 class="locked-title">\${data.title}</h3>
+              <p class="locked-subtitle">This daily carnival game unlocks in the next 24-hour cycle.</p>
+              
+              <div class="countdown-clock-wrapper">
+                <div class="countdown-box">
+                  <div class="clock-num" id="countdown-hours">00</div>
+                  <div class="clock-lbl">HOURS</div>
+                </div>
+                <div class="clock-sep">:</div>
+                <div class="countdown-box">
+                  <div class="clock-num" id="countdown-mins">00</div>
+                  <div class="clock-lbl">MINUTES</div>
+                </div>
+                <div class="clock-sep">:</div>
+                <div class="countdown-box">
+                  <div class="clock-num" id="countdown-secs">00</div>
+                  <div class="clock-lbl">SECONDS</div>
+                </div>
+              </div>
+
+              <div class="locked-action-box">
+                <p class="locked-note">✨ Today's game is active and waiting for you!</p>
+                <button class="btn-switch-active" onclick="switchGame(\${ACTIVE_GAME_ID})">PLAY TODAY'S ACTIVE GAME</button>
+              </div>
+            </div>
+          \`;
+
+          mainActionBtn.textContent = "🔒 UNLOCKS IN 24H";
+          mainActionBtn.classList.add("disabled");
+          mainActionBtn.onclick = () => {
+            switchGame(ACTIVE_GAME_ID);
+          };
+
+          function updateTimer() {
+            const now = new Date();
+            const daysAhead = Math.max(1, id - ACTIVE_GAME_ID);
+            const targetDate = new Date(now);
+            targetDate.setDate(targetDate.getDate() + (daysAhead - 1));
+            targetDate.setHours(24, 0, 0, 0); // Next midnight
+
+            const diff = targetDate.getTime() - now.getTime();
+            if (diff <= 0) {
+              if (countdownTimer) clearInterval(countdownTimer);
+              window.location.reload();
+              return;
+            }
+
+            const totalSeconds = Math.floor(diff / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+
+            const hEl = document.getElementById("countdown-hours");
+            const mEl = document.getElementById("countdown-mins");
+            const sEl = document.getElementById("countdown-secs");
+            if (hEl) hEl.textContent = String(hours).padStart(2, '0');
+            if (mEl) mEl.textContent = String(minutes).padStart(2, '0');
+            if (sEl) sEl.textContent = String(seconds).padStart(2, '0');
+
+            if (mainActionBtn && currentGameId === id) {
+              mainActionBtn.textContent = \`🔒 UNLOCKS IN \${String(hours).padStart(2, '0')}:\${String(minutes).padStart(2, '0')}:\${String(seconds).padStart(2, '0')}\`;
+            }
+          }
+
+          updateTimer();
+          countdownTimer = setInterval(updateTimer, 1000);
+        }
+
         function switchGame(id) {
           if (activeAnimationId) {
             cancelAnimationFrame(activeAnimationId);
             activeAnimationId = null;
+          }
+          if (countdownTimer) {
+            clearInterval(countdownTimer);
+            countdownTimer = null;
           }
 
           currentGameId = id;
@@ -1550,17 +1858,29 @@ export const loader = async ({ request }) => {
             }
           });
 
-          // Launch Game Canvas
-          LAUNCHERS[id]();
+          const locked = isGameLocked(id);
+          const mainActionBtn = document.getElementById("main-action-btn");
+          mainActionBtn.onclick = null;
+          mainActionBtn.classList.remove("disabled");
+
+          if (locked) {
+            renderLockedScreen(id, data);
+          } else {
+            LAUNCHERS[id]();
+          }
         }
 
         // Render Tabs
         const tabsContainer = document.getElementById("game-tabs-container");
+        tabsContainer.innerHTML = "";
         GAMES_DATA.forEach(g => {
+          const locked = isGameLocked(g.id);
           const btn = document.createElement("button");
-          btn.className = "game-tab-btn" + (g.id === currentGameId ? " active" : "");
+          btn.className = "game-tab-btn" + 
+            (g.id === currentGameId ? " active" : "") + 
+            (locked ? " tab-locked" : "");
           btn.setAttribute("data-id", g.id);
-          btn.textContent = g.tabName;
+          btn.innerHTML = (locked ? '<span class="tab-lock-icon">🔒</span> ' : '') + g.tabName;
           btn.onclick = () => switchGame(g.id);
           tabsContainer.appendChild(btn);
         });

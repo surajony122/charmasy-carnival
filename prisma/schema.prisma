@@ -50,4 +50,5 @@ model GameSettings {
   id           String  @id @default(cuid())
   shop         String  @unique
   activeGameId Int     @default(1) // Which game is currently live today?
+  testMode     Boolean @default(true) // If true, all 9 games are unlocked for testing
 }
