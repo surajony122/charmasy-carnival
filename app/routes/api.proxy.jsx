@@ -21,8 +21,60 @@ function makeCode() {
   return "CHM-" + out;
 }
 
+// Finds the customer by email or creates one (no marketing consent is set). Returns the customer GID or null.
+async function upsertCustomer(admin, email) {
+  if (!admin) return null;
+  try {
+    const found = await (await admin.graphql(
+      `#graphql
+      query findCustomer($q: String!) { customers(first: 1, query: $q) { nodes { id } } }`,
+      { variables: { q: "email:" + JSON.stringify(email) } }
+    )).json();
+    let id = found?.data?.customers?.nodes?.[0]?.id || null;
+    if (!id) {
+      const created = await (await admin.graphql(
+        `#graphql
+        mutation createCustomer($input: CustomerInput!) {
+          customerCreate(input: $input) { customer { id } userErrors { field message } }
+        }`,
+        { variables: { input: { email, tags: ["carnival-2026"] } } }
+      )).json();
+      id = created?.data?.customerCreate?.customer?.id || null;
+      if (!id) console.error("Customer create failed:", JSON.stringify(created?.errors || created?.data?.customerCreate?.userErrors));
+    } else {
+      await admin.graphql(
+        `#graphql
+        mutation tag($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { userErrors { message } } }`,
+        { variables: { id, tags: ["carnival-2026"] } }
+      );
+    }
+    return id;
+  } catch (e) {
+    console.error("Customer upsert error:", e);
+    return null;
+  }
+}
+
+// Backup of the win on the customer profile (metafield carnival.last_win).
+async function saveWinToCustomer(admin, customerGid, info) {
+  if (!admin || !customerGid) return;
+  try {
+    const res = await (await admin.graphql(
+      `#graphql
+      mutation setMeta($m: [MetafieldsSetInput!]!) {
+        metafieldsSet(metafields: $m) { userErrors { message } }
+      }`,
+      { variables: { m: [{ ownerId: customerGid, namespace: "carnival", key: "last_win", type: "json", value: JSON.stringify(info) }] } }
+    )).json();
+    const errs = res?.data?.metafieldsSet?.userErrors || [];
+    if (errs.length) console.error("Customer metafield failed:", JSON.stringify(errs));
+  } catch (e) {
+    console.error("Customer metafield error:", e);
+  }
+}
+
 // Creates a single-use, 7-day Shopify discount. Returns true on success (needs write_discounts scope).
-async function createShopifyDiscount(admin, code, parsed) {
+async function createShopifyDiscount(admin, code, parsed, customerGid) {
   if (!admin || !parsed || parsed.kind === "gift") return false;
   const value = parsed.kind === "percent"
     ? { percentage: parsed.value / 100 }
@@ -44,7 +96,7 @@ async function createShopifyDiscount(admin, code, parsed) {
           endsAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
           usageLimit: 1,
           appliesOncePerCustomer: true,
-          customerSelection: { all: true },
+          customerSelection: customerGid ? { customers: { add: [customerGid] } } : { all: true },
           combinesWith: { orderDiscounts: false, productDiscounts: false, shippingDiscounts: false },
           customerGets: { value, items: { all: true } },
         },
@@ -92,10 +144,11 @@ export const action = async ({ request }) => {
         return json({ success: true, code: existing.couponCode, email: existing.email, unique: existing.couponCode.startsWith("CHM-") });
       }
 
+      const customerGid = await upsertCustomer(admin, email);
       let code = makeCode();
       let unique = false;
       try {
-        unique = await createShopifyDiscount(admin, code, parsed);
+        unique = await createShopifyDiscount(admin, code, parsed, customerGid);
       } catch (e) {
         console.error("Discount create error:", e);
       }
@@ -106,6 +159,7 @@ export const action = async ({ request }) => {
         update: { email, couponCode: code, won: true, prizeValue, customerId: customerId || undefined },
         create: { shop, orderId, customerId: customerId || null, gameId, won: true, prizeType: parsed.kind === "gift" ? "PRODUCT" : "COUPON", prizeValue, email, couponCode: code },
       });
+      await saveWinToCustomer(admin, customerGid, { game: gameId, prize: prizeValue, code, orderId, wonAt: new Date().toISOString() });
       return json({ success: true, code, email, unique });
     }
 
