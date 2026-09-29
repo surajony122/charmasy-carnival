@@ -2,7 +2,7 @@
 
 client_id = "c29ef0b498bfb8f00d1c91c03d9c0cc4"
 name = "charmacy-carnival-app"
-application_url = "https://example.com"
+application_url = "https://charmasy-carnival.onrender.com"
 embedded = true
 
 [webhooks]
@@ -17,17 +17,20 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
 
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = ""
+scopes = "write_products,read_products,write_orders,read_orders"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://charmasy-carnival.onrender.com/auth/callback",
+  "https://charmasy-carnival.onrender.com/auth/shopify/callback",
+  "https://charmasy-carnival.onrender.com/api/auth"
+]
 
 [build]
 include_config_on_deploy = true
 automatically_update_urls_on_dev = true
 
 [app_proxy]
-url = "https://example.com/api/proxy"
+url = "https://charmasy-carnival.onrender.com/api/proxy"
 subpath = "carnival-games"
 prefix = "apps"
