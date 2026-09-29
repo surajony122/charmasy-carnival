@@ -6,10 +6,20 @@ export default async () => {
 };
 
 function Extension() {
-  const orderId = shopify.order?.id || '';
-  const orderIdParam = typeof orderId.value === 'string' 
-    ? orderId.value.split('/').pop() 
-    : (typeof orderId === 'string' ? orderId.split('/').pop() : 'TEST');
+  const confirmation = shopify.orderConfirmation?.value || shopify.orderConfirmation?.current || shopify.orderConfirmation;
+  const rawOrderId = confirmation?.order?.id || '';
+  const orderNumber = confirmation?.number || '';
+
+  let orderIdParam = '';
+  if (rawOrderId && typeof rawOrderId === 'string') {
+    orderIdParam = rawOrderId.split('/').pop();
+  } else if (orderNumber) {
+    orderIdParam = String(orderNumber);
+  } else if (typeof shopify.order?.id === 'string' && shopify.order.id) {
+    orderIdParam = shopify.order.id.split('/').pop();
+  } else {
+    orderIdParam = 'ORDER_' + Date.now();
+  }
 
   const storefrontUrl = shopify.shop?.storefrontUrl?.value || shopify.shop?.storefrontUrl || "https://ravistore-shop.myshopify.com";
   const baseUrl = storefrontUrl.replace(/\/$/, "");
