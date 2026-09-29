@@ -907,7 +907,7 @@ export const loader = async ({ request }) => {
               <div class="phone-top-notch"></div>
               <div class="phone-screen-header">
                 <div class="phone-screen-title" id="phone-game-title">CHARMACY CLAW</div>
-                <div class="phone-screen-order">${orderBadgeText}</div>
+                <div class="phone-screen-order" id="player-label">${orderBadgeText}</div>
               </div>
 
               <!-- Interactive Game Arena -->
@@ -954,6 +954,15 @@ export const loader = async ({ request }) => {
       <script>
         const ORDER_ID = "${orderId}";
         const CUSTOMER_ID = "${customerId}";
+        // Liquid (rendered by Shopify's app proxy): logged-in customer's email, empty for guests
+        const LIQUID_EMAIL = {{ customer.email | default: '' | json }};
+        let PLAYER_EMAIL = LIQUID_EMAIL || "";
+        try { if (!PLAYER_EMAIL) PLAYER_EMAIL = localStorage.getItem("carnival_email") || ""; } catch (e) {}
+
+        function updatePlayerLabel() {
+          const el = document.getElementById("player-label");
+          if (el && PLAYER_EMAIL) el.textContent = PLAYER_EMAIL;
+        }
         const INITIAL_GAME = ${initialGameId};
         let IS_TEST_MODE = ${isTestMode ? "true" : "false"};
         const ACTIVE_GAME_ID = ${activeGameId};
@@ -1107,6 +1116,7 @@ export const loader = async ({ request }) => {
             '<button class="btn-game-action" id="claim-submit" style="max-width:220px;">GET MY CODE →</button>';
 
           const emailEl = document.getElementById("claim-email");
+          if (PLAYER_EMAIL) emailEl.value = PLAYER_EMAIL;
           const errEl = document.getElementById("claim-error");
           const btn = document.getElementById("claim-submit");
 
@@ -1127,6 +1137,9 @@ export const loader = async ({ request }) => {
               .then(r => r.json())
               .then(data => {
                 if (data && data.success) {
+                  PLAYER_EMAIL = data.email || email;
+                  try { localStorage.setItem("carnival_email", PLAYER_EMAIL); } catch (e) {}
+                  updatePlayerLabel();
                   renderCodeScreen(modal, prize, data.code, data.email || email, data.unique);
                 } else {
                   errEl.textContent = (data && data.error) || "Something went wrong. Please try again.";
@@ -2147,6 +2160,7 @@ export const loader = async ({ request }) => {
         }
 
         // Render Tabs & Initialize First Game
+        updatePlayerLabel();
         renderTabs();
         switchGame(currentGameId);
       </script>
