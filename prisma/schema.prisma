@@ -44,6 +44,8 @@ model GamePlay {
   won         Boolean  @default(false)
   prizeType   String?  // "COUPON", "PRODUCT", "NONE"
   prizeValue  String?  // "5_PERCENT", "NIA_LIPSTICK"
+  email       String?
+  couponCode  String?
 }
 
 model GameSettings {

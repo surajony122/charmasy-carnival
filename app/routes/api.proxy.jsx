@@ -2,23 +2,116 @@ import { authenticate } from "../shopify.server";
 import { json } from "@remix-run/node";
 import prisma from "../db.server";
 
+const LEGACY_CODES = { P10: "CARNIVAL10", P5: "CARNIVAL5", R50: "CARNIVAL50", R100: "CARNIVAL100", GIFT: "FREESTELLAR" };
+
+function parsePrize(prize) {
+  const text = String(prize || "");
+  const pct = text.match(/(\d+)\s*%/);
+  if (pct) return { kind: "percent", value: parseInt(pct[1], 10), legacy: pct[1] === "10" ? LEGACY_CODES.P10 : LEGACY_CODES.P5 };
+  const amt = text.match(/₹\s*(\d+)/);
+  if (amt) return { kind: "amount", value: parseInt(amt[1], 10), legacy: amt[1] === "100" ? LEGACY_CODES.R100 : LEGACY_CODES.R50 };
+  if (/stellar|gift|eyeliner/i.test(text)) return { kind: "gift", legacy: LEGACY_CODES.GIFT };
+  return null;
+}
+
+function makeCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return "CHM-" + out;
+}
+
+// Creates a single-use, 7-day Shopify discount. Returns true on success (needs write_discounts scope).
+async function createShopifyDiscount(admin, code, parsed) {
+  if (!admin || !parsed || parsed.kind === "gift") return false;
+  const value = parsed.kind === "percent"
+    ? { percentage: parsed.value / 100 }
+    : { discountAmount: { amount: String(parsed.value), appliesOnEachItem: false } };
+  const res = await admin.graphql(
+    `#graphql
+    mutation createCode($input: DiscountCodeBasicInput!) {
+      discountCodeBasicCreate(basicCodeDiscount: $input) {
+        codeDiscountNode { id }
+        userErrors { field message }
+      }
+    }`,
+    {
+      variables: {
+        input: {
+          title: "Carnival " + code,
+          code,
+          startsAt: new Date().toISOString(),
+          endsAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+          usageLimit: 1,
+          appliesOncePerCustomer: true,
+          customerSelection: { all: true },
+          combinesWith: { orderDiscounts: false, productDiscounts: false, shippingDiscounts: false },
+          customerGets: { value, items: { all: true } },
+        },
+      },
+    }
+  );
+  const data = await res.json();
+  const errs = data?.data?.discountCodeBasicCreate?.userErrors || [];
+  if (errs.length || !data?.data?.discountCodeBasicCreate?.codeDiscountNode) {
+    console.error("Discount create failed:", JSON.stringify(data?.errors || errs));
+    return false;
+  }
+  return true;
+}
+
 export const action = async ({ request }) => {
   let shop = "ravistore-shop.myshopify.com";
+  let admin = null;
   try {
     const authResult = await authenticate.public.appProxy(request);
     if (authResult.session) shop = authResult.session.shop;
+    admin = authResult.admin || null;
   } catch (e) {}
 
   try {
     const formData = await request.formData();
     const orderId = formData.get("orderId");
     const customerId = formData.get("customerId");
-    const won = formData.get("won") === "true";
-    const prizeType = formData.get("prizeType");
-    const prizeValue = formData.get("prizeValue");
     const gameId = parseInt(formData.get("gameId") || "1", 10);
 
     if (!orderId) return json({ success: false });
+
+    // Claim: user submits email, gets a code that is saved against that email.
+    if (formData.get("intent") === "claim") {
+      const email = String(formData.get("email") || "").trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return json({ success: false, error: "Please enter a valid email address." });
+      }
+      const prizeValue = formData.get("prizeValue");
+      const parsed = parsePrize(prizeValue);
+      if (!parsed) return json({ success: false, error: "Unknown prize." });
+
+      const existing = await prisma.gamePlay.findUnique({ where: { orderId } });
+      if (existing && existing.couponCode) {
+        return json({ success: true, code: existing.couponCode, email: existing.email, unique: existing.couponCode.startsWith("CHM-") });
+      }
+
+      let code = makeCode();
+      let unique = false;
+      try {
+        unique = await createShopifyDiscount(admin, code, parsed);
+      } catch (e) {
+        console.error("Discount create error:", e);
+      }
+      if (!unique) code = parsed.legacy;
+
+      await prisma.gamePlay.upsert({
+        where: { orderId },
+        update: { email, couponCode: code, won: true, prizeValue, customerId: customerId || undefined },
+        create: { shop, orderId, customerId: customerId || null, gameId, won: true, prizeType: parsed.kind === "gift" ? "PRODUCT" : "COUPON", prizeValue, email, couponCode: code },
+      });
+      return json({ success: true, code, email, unique });
+    }
+
+    const won = formData.get("won") === "true";
+    const prizeType = formData.get("prizeType");
+    const prizeValue = formData.get("prizeValue");
 
     await prisma.gamePlay.upsert({
       where: { orderId },
@@ -29,7 +122,7 @@ export const action = async ({ request }) => {
     return json({ success: true });
   } catch (err) {
     console.error("GamePlay action recording error:", err);
-    return json({ success: true, fallback: true });
+    return json({ success: false, error: "Something went wrong. Please try again." });
   }
 };
 
@@ -921,21 +1014,95 @@ export const loader = async ({ request }) => {
           fetch(window.location.href, { method: "POST", body: fd }).catch(() => {});
         }
 
-        function claimPrize(prize) {
-          if (!prize) return;
-          if (prize.includes("10%")) {
-            window.location.href = "/discount/CARNIVAL10?redirect=/collections/all";
-          } else if (prize.includes("5%")) {
-            window.location.href = "/discount/CARNIVAL5?redirect=/collections/all";
-          } else if (prize.includes("50")) {
-            window.location.href = "/discount/CARNIVAL50?redirect=/collections/all";
-          } else if (prize.includes("100")) {
-            window.location.href = "/discount/CARNIVAL100?redirect=/collections/all";
-          } else if (prize.toLowerCase().includes("stellar") || prize.toLowerCase().includes("gift") || prize.toLowerCase().includes("eyeliner")) {
-            window.location.href = "/discount/FREESTELLAR?redirect=/collections/all";
+        function shopNow(code) {
+          if (code) {
+            window.location.href = "/discount/" + encodeURIComponent(code) + "?redirect=/collections/all";
           } else {
             window.location.href = "/collections/all";
           }
+        }
+
+        function copyCode(code, btn) {
+          const done = () => { btn.textContent = "COPIED ✓"; setTimeout(() => { btn.textContent = "COPY"; }, 1800); };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(code).then(done).catch(() => fallbackCopy(code, done));
+          } else {
+            fallbackCopy(code, done);
+          }
+        }
+
+        function fallbackCopy(code, done) {
+          const ta = document.createElement("textarea");
+          ta.value = code;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand("copy"); done(); } catch (e) {}
+          ta.remove();
+        }
+
+        function renderClaimForm(modal, prize) {
+          modal.innerHTML =
+            '<div class="modal-icon">🎁</div>' +
+            '<div class="modal-title">Get your code</div>' +
+            '<div class="modal-body">Enter your email so we can link <b>' + prize + '</b> to you and send you the code.</div>' +
+            '<input type="email" id="claim-email" placeholder="you@example.com" autocomplete="email" ' +
+              'style="width:100%;max-width:230px;padding:10px 12px;border:1.5px solid #EBDDCB;border-radius:10px;font-size:14px;margin-bottom:6px;text-align:center;font-family:inherit;">' +
+            '<div id="claim-error" style="color:#B00020;font-size:11px;min-height:16px;margin-bottom:8px;"></div>' +
+            '<button class="btn-game-action" id="claim-submit" style="max-width:220px;">GET MY CODE →</button>';
+
+          const emailEl = document.getElementById("claim-email");
+          const errEl = document.getElementById("claim-error");
+          const btn = document.getElementById("claim-submit");
+
+          const submit = () => {
+            const email = emailEl.value.trim();
+            if (!/^[^ @]+@[^ @]+[.][^ @]+$/.test(email)) { errEl.textContent = "Please enter a valid email address."; return; }
+            errEl.textContent = "";
+            btn.disabled = true;
+            btn.textContent = "PLEASE WAIT…";
+            const fd = new FormData();
+            fd.append("intent", "claim");
+            fd.append("orderId", ORDER_ID);
+            fd.append("customerId", CUSTOMER_ID);
+            fd.append("gameId", currentGameId);
+            fd.append("prizeValue", prize);
+            fd.append("email", email);
+            fetch(window.location.href, { method: "POST", body: fd })
+              .then(r => r.json())
+              .then(data => {
+                if (data && data.success) {
+                  renderCodeScreen(modal, prize, data.code, data.email || email, data.unique);
+                } else {
+                  errEl.textContent = (data && data.error) || "Something went wrong. Please try again.";
+                  btn.disabled = false;
+                  btn.textContent = "GET MY CODE →";
+                }
+              })
+              .catch(() => {
+                errEl.textContent = "Network error. Please try again.";
+                btn.disabled = false;
+                btn.textContent = "GET MY CODE →";
+              });
+          };
+          btn.onclick = submit;
+          emailEl.onkeydown = (e) => { if (e.key === "Enter") submit(); };
+        }
+
+        function renderCodeScreen(modal, prize, code, email, unique) {
+          modal.innerHTML =
+            '<div class="modal-icon">🎉</div>' +
+            '<div class="modal-title">Your code</div>' +
+            '<div class="modal-body">' + prize + ' is saved for <b>' + email + '</b>.' + (unique ? ' Single-use, valid for 7 days.' : '') + '</div>' +
+            '<div style="display:flex;align-items:center;gap:8px;border:2px dashed #6B2237;border-radius:12px;padding:8px 8px 8px 14px;background:#FCF5E8;margin-bottom:14px;">' +
+              '<span id="coupon-code-text" style="font-size:18px;font-weight:800;letter-spacing:2px;color:#6B2237;">' + code + '</span>' +
+              '<button id="copy-code-btn" style="border:none;background:#6B2237;color:#fff;font-weight:800;font-size:11px;letter-spacing:1px;padding:8px 12px;border-radius:8px;cursor:pointer;">COPY</button>' +
+            '</div>' +
+            '<button class="btn-game-action" id="shop-now-btn" style="max-width:220px;">SHOP NOW →</button>' +
+            '<div style="font-size:10px;color:#8B7355;margin-top:10px;max-width:240px;">Paste the code at checkout. Copy it now — you will need it.</div>';
+          document.getElementById("copy-code-btn").onclick = function () { copyCode(code, this); };
+          document.getElementById("shop-now-btn").onclick = () => shopNow(code);
         }
 
         function showGameToast(msg) {
@@ -962,14 +1129,14 @@ export const loader = async ({ request }) => {
             '<div class="modal-title">' + title + '</div>' +
             '<div class="modal-body">' + message + '</div>' +
             (won 
-              ? '<button class="btn-game-action" id="modal-claim-btn" style="max-width:220px;">CLAIM REWARD →</button>'
+              ? '<button class="btn-game-action" id="modal-claim-btn" style="max-width:220px;">GET MY CODE →</button>'
               : '<button class="btn-game-action" id="modal-retry-btn" style="max-width:220px;">TRY AGAIN</button>'
             );
 
           arena.appendChild(modal);
 
           if (won) {
-            document.getElementById("modal-claim-btn").onclick = () => claimPrize(prize);
+            document.getElementById("modal-claim-btn").onclick = () => renderClaimForm(modal, prize);
           } else if (onRetry) {
             document.getElementById("modal-retry-btn").onclick = () => {
               modal.remove();
