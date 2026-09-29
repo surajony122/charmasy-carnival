@@ -183,7 +183,7 @@ export const loader = async ({ request }) => {
   ];
 
   const preRenderedTabsHtml = gamesList.map(g => {
-    const isLocked = g.id !== activeGameId;
+    const isLocked = !isTestMode && g.id !== activeGameId;
     const isActive = g.id === initialGameId;
     return `<button class="game-tab-btn${isActive ? ' active' : ''}${isLocked ? ' tab-locked' : ''}" data-id="${g.id}" onclick="switchGame(${g.id})">${isLocked ? '<span class="tab-lock-icon">🔒</span> ' : ''}${g.tabName}</button>`;
   }).join('');
@@ -813,9 +813,7 @@ export const loader = async ({ request }) => {
             <div class="slide-title-row">
               <span class="slide-date-tag" id="slide-date-display">12 OCT</span>
               <h1 class="slide-main-title" id="slide-title-display">CHARMACY CLAW</h1>
-              <button class="mode-indicator-pill ${isTestMode ? 'mode-test' : 'mode-customer'}" id="mode-badge-toggle" onclick="toggleTestModeClient()" title="Click to toggle Test Mode / Customer Mode" style="cursor:pointer;border:none;">
-                ${isTestMode ? '🟢 Test Mode (Click to Preview Customer)' : '🔒 Customer 24H Mode (Click to Enable Test)'}
-              </button>
+              ${isTestMode ? `<button class="mode-indicator-pill mode-test" id="mode-badge-toggle" onclick="toggleTestModeClient()" title="Click to toggle Test Mode / Customer Mode" style="cursor:pointer;border:none;">🟢 Test Mode (Click to Preview Customer)</button>` : ''}
             </div>
             <p class="slide-tagline" id="slide-tagline-display">A fast luck-based opener: position the claw, tap to drop, and try to pick a Charmacy prize.</p>
           </div>
@@ -1918,6 +1916,7 @@ export const loader = async ({ request }) => {
         let countdownTimer = null;
 
         function isGameLocked(id) {
+          if (IS_TEST_MODE) return false;
           if (id === ACTIVE_GAME_ID) return false;
           return true;
         }
