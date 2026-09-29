@@ -808,7 +808,7 @@ export const loader = async ({ request }) => {
         const ORDER_ID = "${orderId}";
         const CUSTOMER_ID = "${customerId}";
         const INITIAL_GAME = ${initialGameId};
-        const IS_TEST_MODE = ${isTestMode ? "true" : "false"};
+        let IS_TEST_MODE = ${isTestMode ? "true" : "false"};
         const ACTIVE_GAME_ID = ${activeGameId};
 
         const GAMES_DATA = [
@@ -1590,7 +1590,7 @@ export const loader = async ({ request }) => {
                 '<span style="font-size:9px;font-weight:800;background:#F7EFE2;padding:3px 8px;border-radius:6px;color:#6B2237;">₹100</span>' +
                 '<span style="font-size:9px;font-weight:800;background:#6B2237;color:#fff;padding:3px 8px;border-radius:6px;">GIFT</span>' +
               '</div>' +
-              '<div style="font-size:9px;font-weight:700;color:#8B7355;margin-top:6px;">Drag to scratch and reveal today\'s reward</div>' +
+              '<div style="font-size:9px;font-weight:700;color:#8B7355;margin-top:6px;">Drag to scratch and reveal today\\'s reward</div>' +
             '</div>';
 
           const cvs = document.getElementById("scratch-canvas");
