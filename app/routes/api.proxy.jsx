@@ -306,6 +306,8 @@ export const loader = async ({ request }) => {
             grid-template-columns: 1fr;
             gap: 20px;
           }
+          /* Mobile: game directly under the tabs, info cards below it */
+          .phone-mockup-wrapper { order: -1; }
         }
 
         /* Left and Right Info Columns */
