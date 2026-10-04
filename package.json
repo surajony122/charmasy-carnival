@@ -10,7 +10,7 @@
     "deploy": "shopify app deploy",
     "config:use": "shopify app config use",
     "env": "shopify app env",
-    "start": "export DATABASE_URL=${DATABASE_URL:-file:./dev.sqlite} && prisma db push --accept-data-loss && HOST=0.0.0.0 remix-serve ./build/server/index.js",
+    "start": "node scripts/start.mjs",
     "docker-start": "npm run setup && npm run start",
     "setup": "export DATABASE_URL=${DATABASE_URL:-file:./dev.sqlite} && prisma generate && prisma migrate deploy",
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",

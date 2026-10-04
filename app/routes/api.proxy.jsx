@@ -5,6 +5,26 @@ import { buildPage } from "../carnival-page";
 
 const LEGACY_CODES = { P10: "CARNIVAL10", P5: "CARNIVAL5", R50: "CARNIVAL50", R100: "CARNIVAL100", GIFT: "FREESTELLAR" };
 
+const DAILY_PRIZE_CAP = 6; // deck: exactly 6 prizes per game per day
+
+// Start of "today" in India time, as a UTC Date.
+function istDayStart() {
+  const ist = new Date(Date.now() + 5.5 * 3600 * 1000);
+  return new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()) - 5.5 * 3600 * 1000);
+}
+
+// Small in-memory limiter: at most `max` calls per IP per minute.
+const hits = new Map();
+function tooMany(request, max = 20) {
+  const ip = (request.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
+  const now = Date.now();
+  const list = (hits.get(ip) || []).filter((t) => now - t < 60000);
+  list.push(now);
+  hits.set(ip, list);
+  if (hits.size > 5000) hits.clear();
+  return list.length > max;
+}
+
 function parsePrize(prize) {
   const text = String(prize || "");
   const pct = text.match(/(\d+)\s*%/);
@@ -140,9 +160,36 @@ export const action = async ({ request }) => {
       const parsed = parsePrize(prizeValue);
       if (!parsed) return json({ success: false, error: "Unknown prize." });
 
+      if (tooMany(request)) return json({ success: false, error: "Too many attempts. Please wait a minute and try again." });
+
       const existing = await prisma.gamePlay.findUnique({ where: { orderId } });
       if (existing && existing.couponCode) {
         return json({ success: true, code: existing.couponCode, email: existing.email, unique: existing.couponCode.startsWith("CHM-") });
+      }
+
+      // Rules from the deck, enforced here because the browser can't be trusted:
+      // a recorded win must exist, max 6 prizes per game per day, one prize per email per day.
+      // (Skipped only when the admin has switched the app's test mode on.)
+      let adminTest = false;
+      try {
+        const st = (await prisma.gameSettings.findUnique({ where: { shop } })) || (await prisma.gameSettings.findFirst());
+        adminTest = !!(st && st.testMode === true);
+      } catch (e) {}
+      if (!adminTest) {
+        if (!existing || !existing.won || existing.prizeValue !== prizeValue) {
+          return json({ success: false, error: "We couldn't verify this win. Please play again." });
+        }
+        const dayStart = istDayStart();
+        const already = await prisma.gamePlay.findFirst({ where: { email, claimedAt: { gte: dayStart } } });
+        if (already) {
+          return json({ success: false, error: "You've already claimed today's prize. Come back tomorrow for the next game!" });
+        }
+        const claimedToday = await prisma.gamePlay.count({
+          where: { shop, gameId: existing.gameId, couponCode: { not: null }, claimedAt: { gte: dayStart } },
+        });
+        if (claimedToday >= DAILY_PRIZE_CAP) {
+          return json({ success: false, error: "All of today's prizes for this game have been claimed. Come back tomorrow!" });
+        }
       }
 
       const customerGid = await upsertCustomer(admin, email);
@@ -157,8 +204,8 @@ export const action = async ({ request }) => {
 
       await prisma.gamePlay.upsert({
         where: { orderId },
-        update: { email, couponCode: code, won: true, prizeValue, customerId: customerId || undefined },
-        create: { shop, orderId, customerId: customerId || null, gameId, won: true, prizeType: parsed.kind === "gift" ? "PRODUCT" : "COUPON", prizeValue, email, couponCode: code },
+        update: { email, couponCode: code, claimedAt: new Date(), won: true, prizeValue, customerId: customerId || undefined },
+        create: { shop, orderId, customerId: customerId || null, gameId, won: true, prizeType: parsed.kind === "gift" ? "PRODUCT" : "COUPON", prizeValue, email, couponCode: code, claimedAt: new Date() },
       });
       await saveWinToCustomer(admin, customerGid, { game: gameId, prize: prizeValue, code, orderId, wonAt: new Date().toISOString() });
       return json({ success: true, code, email, unique });

@@ -46,6 +46,7 @@ model GamePlay {
   prizeValue  String?  // "5_PERCENT", "NIA_LIPSTICK"
   email       String?
   couponCode  String?
+  claimedAt   DateTime?
 }
 
 model GameSettings {
