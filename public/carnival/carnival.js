@@ -484,7 +484,7 @@
     for (var i = 1; i <= 9; i++) {
       (function (id) {
         var m = META[id], b = document.createElement("button");
-        b.className = "tab" + (id === curId ? " active" : "") + (isLocked(id) ? " locked" : "");
+        b.className = "tab" + (id === curId ? " active" : "") + (isLocked(id) ? " tab-locked" : "");
         b.setAttribute("data-id", id);
         b.innerHTML = (isLocked(id) ? "🔒 " : m.icon + " ") + esc(m.tab);
         b.onclick = function () { switchGame(id); };

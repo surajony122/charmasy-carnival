@@ -100,7 +100,7 @@ body::before {
 }
 .tab:active { transform: translateY(3px); box-shadow: 0 1px 0 #e8a3bd; }
 .tab.active { color: #fff; background: linear-gradient(#ff7fae, #e11d63); box-shadow: 0 4px 0 #a10f4d, 0 8px 14px rgba(161,15,77,.35); }
-.tab.locked { opacity: .72; }
+.tab.tab-locked { opacity: .72; }
 
 /* ---------- stage (game area) ---------- */
 .stage-frame {
