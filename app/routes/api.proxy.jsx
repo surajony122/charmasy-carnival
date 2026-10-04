@@ -21,16 +21,25 @@ function makeCode() {
   return "CHM-" + out;
 }
 
-// Small in-memory limiter: at most `max` calls per IP per minute.
+// Small in-memory limiter. Keyed per order (not per IP: behind Shopify's proxy and mobile networks many
+// customers can share one IP), plus a very high per-IP ceiling that only stops scripted abuse.
 const hits = new Map();
-function tooMany(request, max) {
-  const ip = (request.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
+function tooMany(key, max) {
   const now = Date.now();
-  const list = (hits.get(ip) || []).filter((t) => now - t < 60000);
+  const list = (hits.get(key) || []).filter((t) => now - t < 60000);
   list.push(now);
-  hits.set(ip, list);
-  if (hits.size > 5000) hits.clear();
+  hits.set(key, list);
+  if (hits.size > 20000) {
+    for (const [k, v] of hits) if (!v.length || now - v[v.length - 1] > 60000) hits.delete(k);
+    if (hits.size > 20000) hits.clear();
+  }
   return list.length > max;
+}
+function limited(request, intent, orderId) {
+  const ip = (request.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
+  if (tooMany("ip:" + ip, 12000)) return true;
+  if (orderId && (intent === "play" || intent === "claim")) return tooMany(`${intent}:${orderId}`, intent === "play" ? 30 : 15);
+  return false;
 }
 
 async function context(request) {
@@ -235,7 +244,7 @@ export const action = async ({ request }) => {
   try {
     const fd = await request.formData();
     const intent = fd.get("intent");
-    if (tooMany(request, intent === "play" ? 40 : 25)) {
+    if (limited(request, intent, clean(fd.get("orderId"), 80))) {
       return json(fail("rate", "Too many attempts. Please wait a minute and try again."));
     }
     const ctx = await context(request);

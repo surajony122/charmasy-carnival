@@ -1,9 +1,26 @@
 // Everything the Carnival does inside Shopify: look up orders, customers, discount codes, free products.
 // All functions take the `admin` GraphQL client and never throw — they return null / {ok:false,...}.
 
+// Shopify limits how fast the Admin API can be called ("THROTTLED"). Wait and retry a few times so a busy
+// moment does not fail a customer's claim.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function gql(admin, query, variables) {
-  const res = await admin.graphql(query, { variables });
-  return res.json();
+  let last;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const res = await admin.graphql(query, { variables });
+      const data = await res.json();
+      const throttled = (data?.errors || []).some((e) => e?.extensions?.code === "THROTTLED" || /throttled/i.test(e?.message || ""));
+      if (!throttled) return data;
+      last = data;
+    } catch (e) {
+      const msg = String(e?.message || e);
+      if (!/429|throttl|rate/i.test(msg) && !(e?.response?.status === 429)) throw e;
+      last = { errors: [{ message: msg }] };
+    }
+    await sleep(700 * (attempt + 1) + Math.random() * 300);
+  }
+  return last;
 }
 
 export function maskEmail(email) {

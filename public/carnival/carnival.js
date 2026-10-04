@@ -494,7 +494,7 @@
     var app = document.getElementById("app");
     app.innerHTML =
       '<div class="wrap">' +
-      '<header class="hdr"><img class="logo" alt="Charmacy Carnival 2026" src="' + CFG.assets + '/img/logo-mark.png"><div class="player" id="player"></div></header>' +
+      '<header class="hdr"><img class="logo" alt="Charmacy Carnival 2026" src="' + CFG.assets + '/img/logo-mark-small.png"><div class="player" id="player"></div></header>' +
       '<h1 class="title" id="title"></h1>' +
       (CFG.isTest ? '<button class="mode-pill" id="modeBtn"></button>' : "") +
       '<nav class="tabs" id="tabs" aria-label="Games"></nav>' +
