@@ -5,6 +5,8 @@ export default async () => {
   render(<Extension />, document.body);
 };
 
+const BANNER = "https://charmasy-carnival.onrender.com/carnival/img/ty-banner.jpg";
+
 // Signals expose their data on .value (or .current); older runtimes hand back the plain object.
 const unwrap = (x) => (x && typeof x === 'object' && 'value' in x ? x.value : x && typeof x === 'object' && 'current' in x ? x.current : x);
 const lastPart = (gid) => (typeof gid === 'string' && gid ? gid.split('/').pop() : '');
@@ -35,15 +37,21 @@ function Extension() {
   const gameUrl = `${baseUrl}/apps/carnival-games?order_id=${orderId}${customerQuery}`;
 
   return (
-    <s-banner heading="Charmacy Carnival is LIVE!" tone="success">
-      <s-stack gap="base">
-        <s-text>
-          Thank you for your order! This order gives you 1 play of today's Carnival game. Play now and you could win a coupon or a free gift.
-        </s-text>
-        <s-button href={gameUrl} target="_blank" variant="primary">
-          Play & Win
-        </s-button>
+    <s-box border="base" borderRadius="large" overflow="hidden" background="subdued">
+      <s-stack gap="none">
+        <s-image src={BANNER} alt="Charmacy Carnival 2026 - play and win" aspectRatio="1200/440" objectFit="cover" />
+        <s-box padding="base">
+          <s-stack gap="small-300">
+            <s-heading>🎪 Your order unlocked a Carnival play!</s-heading>
+            <s-text>
+              Play today's game and you could win a coupon or a free gift. One order = one play, so make it count! 🎁
+            </s-text>
+            <s-button href={gameUrl} target="_blank" variant="primary">
+              🎡 Play & Win
+            </s-button>
+          </s-stack>
+        </s-box>
       </s-stack>
-    </s-banner>
+    </s-box>
   );
 }
