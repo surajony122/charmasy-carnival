@@ -78,7 +78,7 @@ window.CarnivalGames[9] = function (C) {
       note.textContent = "Found " + hit + "! ✨";
       if (words.every(function (w) { return found[w]; })) {
         over = true;
-        C.timeout(function () { C.result({ won: true, title: "Puzzle solved!", icon: "🧩", msg: "You found both hidden words!", prize: C.prize(C.weighted({ nia: 3, p5: 4, p10: 3 })) }); }, 900);
+        C.timeout(function () { C.winOrNot({ title: "Puzzle solved!", icon: "🧩", msg: "You found both hidden words!" }); }, 900);
       }
     }
     start = null; path = []; paint();

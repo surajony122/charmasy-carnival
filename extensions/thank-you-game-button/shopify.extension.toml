@@ -21,10 +21,6 @@ target = "purchase.thank-you.block.render"
 
 [[extensions.targeting]]
 module = "./src/Checkout.jsx"
-target = "customer-account.order-index.block.render"
-
-[[extensions.targeting]]
-module = "./src/Checkout.jsx"
 target = "customer-account.order-status.block.render"
 
 [extensions.capabilities]

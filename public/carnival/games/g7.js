@@ -15,7 +15,8 @@ window.CarnivalGames[7] = function (C) {
       c: COLORS[i % COLORS.length], lucky: false, dead: false
     });
   }
-  C.pick(balloons).lucky = true;
+  var O = C.outcome, luckyPopped = false;
+  if (O.win) C.pick(balloons).lucky = true;       // the server decided: only a winning play has a lucky balloon
 
   function burst(b) {
     for (var k = 0; k < 26; k++) {
@@ -27,7 +28,7 @@ window.CarnivalGames[7] = function (C) {
   function end(won) {
     over = true;
     C.timeout(function () {
-      if (won) C.result({ won: true, title: "Lucky balloon!", icon: "🎈", msg: "You popped the birthday surprise!", prize: C.prize(C.weighted({ nia: 3, p5: 4, p10: 3 })) });
+      if (won) C.result({ won: true, title: "Lucky balloon!", icon: "🎈", msg: "You popped the birthday surprise!" });
       else C.result({ won: false, title: "No more pops!", icon: "🎈", msg: "The lucky balloon got away. Try again!" });
     }, 900);
   }
@@ -41,8 +42,10 @@ window.CarnivalGames[7] = function (C) {
       if (d < b.r * 1.25 && d < bd) { bd = d; best = b; }
     });
     if (!best) return;
+    // a winning play must be winnable: if this is the last pop, that balloon is the lucky one
+    if (O.win && !luckyPopped && pops === 1) best.lucky = true;
     best.dead = true; pops--; burst(best);
-    if (best.lucky) { texts.push({ x: best.px, y: best.y, t: 0, s: "🎁 LUCKY!", c: "#ffc93c" }); end(true); }
+    if (best.lucky) { luckyPopped = true; texts.push({ x: best.px, y: best.y, t: 0, s: "🎁 LUCKY!", c: "#ffc93c" }); end(true); }
     else {
       texts.push({ x: best.px, y: best.y, t: 0, s: "Empty!", c: "#ffffff" });
       if (pops <= 0) end(false);

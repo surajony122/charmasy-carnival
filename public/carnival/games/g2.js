@@ -4,23 +4,28 @@ window.CarnivalGames[2] = function (C) {
   var cvs = C.canvas(), ctx = cvs.ctx;
   var CX = 180, CY = 300, R = 128, RIM = 15;
 
-  var SEGS = [
-    { l: ["NIA", "FREE"], icon: "🎁", c: "#ffc93c", t: "#7a4a00", win: "nia" },
-    { l: ["TRY", "AGAIN"], icon: "💫", c: "#ffffff", t: "#a10f4d", win: null },
-    { l: ["5%", "OFF"], icon: "", c: "#ff5c97", t: "#ffffff", win: "p5" },
-    { l: ["TRY", "AGAIN"], icon: "💫", c: "#ffe3ee", t: "#a10f4d", win: null },
-    { l: ["10%", "OFF"], icon: "", c: "#14b8a6", t: "#ffffff", win: "p10" },
-    { l: ["TRY", "AGAIN"], icon: "💫", c: "#ffffff", t: "#a10f4d", win: null },
-    { l: ["5%", "OFF"], icon: "", c: "#8b5cf6", t: "#ffffff", win: "p5" },
-    { l: ["OH", "NO!"], icon: "🙈", c: "#ffe3ee", t: "#a10f4d", win: null }
-  ];
+  // The wheel shows the prizes this game can really give (set in the app's admin), with "try again" between.
+  var O = C.outcome;
+  var shown = (O.prizes && O.prizes.length) ? O.prizes : [{ label: "5% OFF Coupon", short: "5%", kind: "PERCENT" }];
+  var WIN_COLORS = [["#ffc93c", "#7a4a00"], ["#ff5c97", "#ffffff"], ["#14b8a6", "#ffffff"], ["#8b5cf6", "#ffffff"]];
+  var LOSE = [{ l: ["TRY", "AGAIN"], icon: "💫", c: "#ffffff" }, { l: ["TRY", "AGAIN"], icon: "💫", c: "#ffe3ee" }, { l: ["TRY", "AGAIN"], icon: "💫", c: "#ffffff" }, { l: ["OH", "NO!"], icon: "🙈", c: "#ffe3ee" }];
+  var SEGS = [];
+  for (var wi = 0; wi < 4; wi++) {
+    var wp = shown[wi % shown.length], gift = wp.kind === "FREE_PRODUCT";
+    SEGS.push({ l: [wp.short, gift ? "GIFT" : "OFF"], icon: gift ? "🎁" : "", c: WIN_COLORS[wi][0], t: WIN_COLORS[wi][1], win: true, label: wp.label });
+    var lo = LOSE[wi]; SEGS.push({ l: lo.l, icon: lo.icon, c: lo.c, t: "#a10f4d", win: false });
+  }
   var SA = Math.PI * 2 / SEGS.length;
   var theta = 0, spinning = false, spinT = 0, spinDur = 5.2, from = 0, to = 0, target = 0, finished = false;
 
-  // winning chance is controlled here (server-side control comes later)
+  // The server already decided this play. Land on a slice that matches it.
   function chooseSegment() {
-    var w = { 0: 7, 2: 10, 4: 7, 6: 10, 1: 17, 3: 17, 5: 16, 7: 16 };
-    return +C.weighted(w);
+    var pool = [];
+    SEGS.forEach(function (s, i) {
+      if (O.win ? (s.win && O.prize && s.label === O.prize.label) : !s.win) pool.push(i);
+    });
+    if (!pool.length) SEGS.forEach(function (s, i) { if (s.win === !!O.win) pool.push(i); });
+    return C.pick(pool);
   }
 
   var btn = C.el("button", "btn3d spin-btn", "SPIN!");
@@ -128,7 +133,7 @@ window.CarnivalGames[2] = function (C) {
         finished = true; spinning = false;
         var seg = SEGS[target];
         C.timeout(function () {
-          if (seg.win) C.result({ won: true, title: "Winner!", icon: "🎡", msg: "The wheel landed on your prize!", prize: C.prize(seg.win) });
+          if (seg.win) C.result({ won: true, title: "Winner!", icon: "🎡", msg: "The wheel landed on your prize!" });
           else C.result({ won: false, title: seg.l.join(" "), icon: seg.icon || "💫", msg: "So close! Spin again for another chance." });
         }, 800);
       }

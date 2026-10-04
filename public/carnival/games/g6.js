@@ -49,7 +49,7 @@ window.CarnivalGames[6] = function (C) {
     over = true;
     var won = score > BEAT;
     C.timeout(function () {
-      if (won) C.result({ won: true, title: "New high score!", icon: "✨", msg: "You scored " + score + " and beat " + BEAT + "!", prize: C.prize(C.weighted({ nia: 3, p5: 4, p10: 3 })) });
+      if (won) C.winOrNot({ title: "New high score!", icon: "✨", msg: "You scored " + score + " and beat " + BEAT + "!" });
       else C.result({ won: false, title: "So close!", icon: "✨", msg: "You scored " + score + ". Beat " + BEAT + " to win — try again!" });
     }, 700);
   }

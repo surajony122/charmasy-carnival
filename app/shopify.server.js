@@ -11,7 +11,7 @@ const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY || "c29ef0b498bfb8f00d1c91c03d9c0cc4",
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "c29ef0b498bfb8f00d1c91c03d9c0cc4",
   apiVersion: ApiVersion.January25,
-  scopes: (process.env.SCOPES || "write_products,read_products,write_orders,read_orders,write_discounts,read_customers,write_customers").split(","),
+  scopes: (process.env.SCOPES || "write_products,read_products,write_orders,read_orders,write_discounts,read_customers,write_customers,write_order_edits").split(","),
   appUrl: process.env.SHOPIFY_APP_URL || "https://charmasy-carnival.onrender.com",
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),

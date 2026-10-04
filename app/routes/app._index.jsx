@@ -37,11 +37,13 @@ export const action = async ({ request }) => {
   }
 
   if (actionType === "setActiveGame") {
-    const gameId = parseInt(formData.get("activeGameId") || "1", 10);
+    const raw = formData.get("activeGameId");
+    const auto = raw === "auto";
+    const gameId = auto ? 1 : parseInt(raw || "1", 10);
     await prisma.gameSettings.upsert({
       where: { shop },
-      update: { activeGameId: gameId },
-      create: { shop, activeGameId: gameId, testMode: true },
+      update: { activeGameId: gameId, manualActive: !auto },
+      create: { shop, activeGameId: gameId, manualActive: !auto, testMode: true },
     });
     return json({ success: true });
   }
@@ -64,7 +66,7 @@ export const loader = async ({ request }) => {
     }),
   ]);
 
-  const settings = settingsRecord || { testMode: true, activeGameId: 1 };
+  const settings = settingsRecord || { testMode: true, activeGameId: 1, manualActive: false };
 
   return json({ plays, settings });
 };
@@ -121,15 +123,21 @@ export default function Index() {
             {play.orderId}
           </Text>
         </IndexTable.Cell>
-        <IndexTable.Cell>{play.customerId || "Guest"}</IndexTable.Cell>
+        <IndexTable.Cell>
+          {play.email || "-"}
+          {play.phone ? <Text as="p" variant="bodySm" tone="subdued">{play.phone}</Text> : null}
+        </IndexTable.Cell>
         <IndexTable.Cell>
           <Badge tone="info">{gameNames[play.gameId]}</Badge>
         </IndexTable.Cell>
         <IndexTable.Cell>
-          {play.won ? <Badge tone="success">Won</Badge> : <Badge tone="critical">Lost</Badge>}
+          {!play.finishedAt ? <Badge>Playing</Badge> : play.won ? <Badge tone="success">Won</Badge> : <Badge tone="critical">Lost</Badge>}
         </IndexTable.Cell>
-        <IndexTable.Cell>{play.prizeType || "-"}</IndexTable.Cell>
-        <IndexTable.Cell>{play.prizeValue || "-"}</IndexTable.Cell>
+        <IndexTable.Cell>{play.prizeLabel || play.prizeValue || "-"}</IndexTable.Cell>
+        <IndexTable.Cell>
+          {play.delivery === "order_edit" ? "Added to order" : play.couponCode || (play.won ? "Not claimed" : "-")}
+          {play.deliveryNote ? <Text as="p" variant="bodySm" tone="subdued">{play.deliveryNote}</Text> : null}
+        </IndexTable.Cell>
         <IndexTable.Cell>{new Date(play.playedAt).toLocaleString()}</IndexTable.Cell>
       </IndexTable.Row>
     ),
@@ -156,8 +164,8 @@ export default function Index() {
                     </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
                       {settings.testMode
-                        ? "Test Mode is ON: All 9 daily games are unlocked and playable for testing."
-                        : "Live Customer Mode is ON: Only today's game is active. Upcoming games show a live 24-hour countdown timer."}
+                        ? "Test Mode is ON: all 9 games are playable, no order is needed, replays are unlimited and prize rules are relaxed. Switch it OFF before the campaign."
+                        : "Live Customer Mode is ON: only today's game is active, each order gets one play, and prize rules are enforced."}
                     </Text>
                   </BlockStack>
                   <Button
@@ -182,6 +190,7 @@ export default function Index() {
                       label=""
                       labelHidden
                       options={[
+                        { label: "Automatic - follow the calendar (12-20 Oct)", value: "auto" },
                         { label: "Day 1 (12 Oct) - Charmacy Claw", value: "1" },
                         { label: "Day 2 (13 Oct) - Spin The Glam Wheel", value: "2" },
                         { label: "Day 3 (14 Oct) - Catch My Charmacy", value: "3" },
@@ -192,7 +201,7 @@ export default function Index() {
                         { label: "Day 8 (19 Oct) - Scratch & Win Card", value: "8" },
                         { label: "Day 9 (20 Oct) - Solve The Puzzle", value: "9" },
                       ]}
-                      value={String(settings.activeGameId || 1)}
+                      value={settings.manualActive ? String(settings.activeGameId || 1) : "auto"}
                       onChange={(val) => {
                         const fd = new FormData();
                         fd.append("actionType", "setActiveGame");
@@ -233,8 +242,8 @@ export default function Index() {
                   { title: 'Customer' },
                   { title: 'Game' },
                   { title: 'Status' },
-                  { title: 'Prize Type' },
-                  { title: 'Prize Value' },
+                  { title: 'Prize' },
+                  { title: 'Code / delivery' },
                   { title: 'Played At' },
                 ]}
               >

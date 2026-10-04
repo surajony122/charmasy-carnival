@@ -39,7 +39,7 @@ window.CarnivalGames[4] = function (C) {
     if (answered) return; answered = true;
     reveal();
     if (s === target) {
-      C.timeout(function () { C.result({ won: true, title: "Perfect match!", icon: "💄", msg: "You found " + target.n + "!", prize: C.prize(C.weighted({ nia: 3, p5: 4, p10: 3 })) }); }, 1000);
+      C.timeout(function () { C.winOrNot({ title: "Perfect match!", icon: "💄", msg: "You found " + target.n + "!" }); }, 1000);
     } else {
       b.classList.add("wrong");
       C.timeout(function () { C.result({ won: false, title: "Not quite!", icon: "🎨", msg: "That was " + s.n + ". " + target.n + " is highlighted green." }); }, 1500);

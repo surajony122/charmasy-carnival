@@ -42,7 +42,9 @@
 
   var cleanups = [];
   var curId = 0;
-  var playNo = 0;
+  var attempt = 0;
+  var launchToken = 0;
+  var PLAY = null;   // what the server decided for the current play
   var PLAYER_EMAIL = CFG.liquidEmail || "";
   try { if (!PLAYER_EMAIL) PLAYER_EMAIL = localStorage.getItem("carnival_email") || ""; } catch (e) {}
   var els = {};
@@ -66,7 +68,14 @@
   function isLocked(id) { return !testMode && id !== CFG.activeGame; }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
+  function post(fields) {
+    var fd = new FormData();
+    Object.keys(fields).forEach(function (k) { fd.append(k, fields[k]); });
+    return fetch(window.location.href, { method: "POST", body: fd }).then(function (r) { return r.json(); });
+  }
+
   function cleanup() {
+    launchToken++;
     var fns = cleanups; cleanups = [];
     for (var i = 0; i < fns.length; i++) { try { fns[i](); } catch (e) {} }
   }
@@ -273,23 +282,26 @@
     };
     A.result = showResult;
     A.relaunch = function () { launch(curId); };
+    A.outcome = PLAY;                       // {win, prize:{label,kind,short,image}, prizes:[...], soldOut}
+    // A skill game was completed successfully: pay out only if the server decided this play wins.
+    A.winOrNot = function (o) {
+      if (PLAY && PLAY.win && PLAY.prize) {
+        showResult({ won: true, title: o.title, icon: o.icon, msg: o.msg });
+      } else {
+        showResult({
+          won: false, icon: o.icon || "🎉", title: o.noPrizeTitle || "Great play!",
+          msg: PLAY && PLAY.soldOut ? "You did it! Today's prizes for this game are all gone — come back tomorrow."
+            : "You did it, but there's no prize on this play. Place another order for another chance!"
+        });
+      }
+    };
     return A;
   }
 
   /* ---------------- result + claim flow ---------------- */
-  function playId() { return CFG.orderId + (playNo > 1 ? "-" + playNo : ""); }
-
-  function recordResult(won, prize) {
-    var fd = new FormData();
-    fd.append("orderId", playId());
-    fd.append("customerId", CFG.customerId || "");
-    fd.append("gameId", curId);
-    fd.append("won", won ? "true" : "false");
-    if (prize) {
-      fd.append("prizeType", /nia|gift/i.test(prize) ? "PRODUCT" : "COUPON");
-      fd.append("prizeValue", prize);
-    }
-    try { fetch(window.location.href, { method: "POST", body: fd }).catch(function () {}); } catch (e) {}
+  function recordResult(won) {
+    if (!PLAY) return;
+    post({ intent: "result", orderId: PLAY.playRef, won: won ? "true" : "false" }).catch(function () {});
   }
 
   function confetti(host) {
@@ -314,71 +326,74 @@
     cleanups.push(function () { alive = false; cancelAnimationFrame(id); cv.remove(); });
   }
 
+  function shopUrl() { return "/collections/all"; }
+
   function showResult(o) {
     var stage = els.stage;
     var old = stage.querySelector(".ov"); if (old) old.remove();
-    recordResult(!!o.won, o.won ? o.prize : null);
+    var won = !!(o.won && PLAY && PLAY.win && PLAY.prize);
+    recordResult(won);
     var ov = document.createElement("div"); ov.className = "ov";
     var card = document.createElement("div"); card.className = "ov-card";
     ov.appendChild(card); stage.appendChild(ov);
-    if (o.won) {
+    if (won) {
       confetti(stage);
       card.innerHTML =
         '<div class="ov-icon">' + (o.icon || "🎉") + '</div>' +
         '<div class="ov-title">' + esc(o.title || "You won!") + '</div>' +
         '<div class="ov-msg">' + esc(o.msg || "") + '</div>' +
-        '<div class="ov-prize">' + esc(o.prize) + '</div><br>' +
-        '<button class="btn3d" id="claimBtn">GET MY CODE →</button>';
-      card.querySelector("#claimBtn").onclick = function () { claimForm(card, o.prize); };
+        '<div class="ov-prize">' + esc(PLAY.prize.label) + '</div><br>' +
+        '<button class="btn3d" id="claimBtn">CLAIM MY PRIZE →</button>';
+      card.querySelector("#claimBtn").onclick = function () { claimForm(card); };
     } else {
+      var again = PLAY && PLAY.testMode;
       card.innerHTML =
         '<div class="ov-icon">' + (o.icon || "💫") + '</div>' +
         '<div class="ov-title">' + esc(o.title || "Not this time") + '</div>' +
         '<div class="ov-msg">' + esc(o.msg || "Better luck next time!") + '</div>' +
-        '<button class="btn3d" id="againBtn">TRY AGAIN</button>';
-      card.querySelector("#againBtn").onclick = function () { ov.remove(); (o.retry || A_relaunch)(); };
+        (again ? '<button class="btn3d" id="againBtn">TRY AGAIN (TEST)</button>'
+               : '<div class="fine" style="margin:0 0 12px">Every order gives you a new play.</div><button class="btn3d gold" id="shopBtn">SHOP NOW →</button>');
+      if (again) card.querySelector("#againBtn").onclick = function () { ov.remove(); launch(curId); };
+      else card.querySelector("#shopBtn").onclick = function () { window.location.href = shopUrl(); };
     }
   }
-  function A_relaunch() { launch(curId); }
 
-  function claimForm(card, prize) {
+  function claimForm(card) {
+    var prizeLabel = PLAY.prize ? PLAY.prize.label : (PLAY.prizeLabel || "your prize");
+    var hint = PLAY.hint ? " Use the email from your order (" + esc(PLAY.hint) + ")." : "";
+    var phone0 = ""; try { phone0 = localStorage.getItem("carnival_phone") || ""; } catch (e) {}
     card.innerHTML =
       '<div class="ov-icon">🎁</div>' +
-      '<div class="ov-title">Get your code</div>' +
-      '<div class="ov-msg">Enter your email so we can link <b>' + esc(prize) + '</b> to you and send you the code.</div>' +
-      '<input class="ov-input" id="cEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com">' +
+      '<div class="ov-title">Claim your prize</div>' +
+      '<div class="ov-msg"><b>' + esc(prizeLabel) + '</b>.' + hint + '</div>' +
+      '<input class="ov-input" id="cEmail" type="email" inputmode="email" autocomplete="email" placeholder="Email">' +
+      '<input class="ov-input" id="cPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="Mobile number" style="margin-top:8px">' +
       '<div class="ov-err" id="cErr"></div>' +
-      '<button class="btn3d" id="cGo">GET MY CODE →</button>';
-    var input = card.querySelector("#cEmail"), err = card.querySelector("#cErr"), btn = card.querySelector("#cGo");
-    if (PLAYER_EMAIL) input.value = PLAYER_EMAIL;
+      '<button class="btn3d" id="cGo">GET MY PRIZE →</button>';
+    var email = card.querySelector("#cEmail"), phone = card.querySelector("#cPhone"), err = card.querySelector("#cErr"), btn = card.querySelector("#cGo");
+    if (PLAYER_EMAIL) email.value = PLAYER_EMAIL;
+    phone.value = phone0;
     function go() {
-      var email = input.value.trim();
-      if (!/^[^ @]+@[^ @]+[.][^ @]+$/.test(email)) { err.textContent = "Please enter a valid email address."; return; }
+      var e = email.value.trim(), p = phone.value.trim();
+      if (!/^[^ @]+@[^ @]+[.][^ @]+$/.test(e)) { err.textContent = "Please enter a valid email address."; return; }
+      if (p.replace(/\D/g, "").length < 10) { err.textContent = "Please enter your 10-digit mobile number."; return; }
       err.textContent = ""; btn.disabled = true; btn.textContent = "PLEASE WAIT…";
-      var fd = new FormData();
-      fd.append("intent", "claim");
-      fd.append("orderId", playId());
-      fd.append("customerId", CFG.customerId || "");
-      fd.append("gameId", curId);
-      fd.append("prizeValue", prize);
-      fd.append("email", email);
-      fetch(window.location.href, { method: "POST", body: fd })
-        .then(function (r) { return r.json(); })
+      post({ intent: "claim", orderId: PLAY.playRef, email: e, phone: p })
         .then(function (d) {
           if (d && d.success) {
-            PLAYER_EMAIL = d.email || email;
-            try { localStorage.setItem("carnival_email", PLAYER_EMAIL); } catch (e) {}
+            PLAYER_EMAIL = d.email || e;
+            try { localStorage.setItem("carnival_email", PLAYER_EMAIL); localStorage.setItem("carnival_phone", p); } catch (x) {}
             updatePlayer();
-            codeScreen(card, prize, d.code, PLAYER_EMAIL, d.unique);
+            deliveryScreen(card, d);
           } else {
-            err.textContent = (d && d.error) || "Something went wrong. Please try again.";
-            btn.disabled = false; btn.textContent = "GET MY CODE →";
+            err.textContent = (d && (d.error || d.message)) || "Something went wrong. Please try again.";
+            btn.disabled = false; btn.textContent = "GET MY PRIZE →";
           }
         })
-        .catch(function () { err.textContent = "Network error. Please try again."; btn.disabled = false; btn.textContent = "GET MY CODE →"; });
+        .catch(function () { err.textContent = "Network error. Please try again."; btn.disabled = false; btn.textContent = "GET MY PRIZE →"; });
     }
     btn.onclick = go;
-    input.onkeydown = function (e) { if (e.key === "Enter") go(); };
+    phone.onkeydown = email.onkeydown = function (ev) { if (ev.key === "Enter") go(); };
   }
 
   function copyText(code, btn) {
@@ -393,32 +408,75 @@
     else fallback();
   }
 
-  function codeScreen(card, prize, code, email, unique) {
-    card.innerHTML =
-      '<div class="ov-icon">🎉</div>' +
-      '<div class="ov-title">Your code</div>' +
-      '<div class="ov-msg">' + esc(prize) + ' is saved for <b>' + esc(email) + '</b>.' + (unique ? " Single-use, valid for 7 days." : "") + '</div>' +
-      '<div class="code-box"><span>' + esc(code) + '</span><button class="btn3d small" id="cCopy">COPY</button></div><br>' +
-      '<button class="btn3d gold" id="cShop">SHOP NOW →</button>' +
-      '<div class="fine">Paste the code at checkout. Copy it now — you will need it.</div>';
-    card.querySelector("#cCopy").onclick = function () { copyText(code, this); };
+  function codeBox(code) {
+    return '<div class="code-box"><span>' + esc(code) + '</span><button class="btn3d small" id="cCopy">COPY</button></div><br>';
+  }
+
+  function deliveryScreen(card, d) {
+    var label = d.prizeLabel || (PLAY && PLAY.prize && PLAY.prize.label) || "Your prize";
+    if (d.delivery === "order_edit") {
+      card.innerHTML =
+        '<div class="ov-icon">🎁</div><div class="ov-title">Added to your order!</div>' +
+        '<div class="ov-msg"><b>' + esc(label) + '</b> has been added to your order at no cost. ' + esc(d.note || "") + '</div>' +
+        '<button class="btn3d gold" id="cShop">KEEP SHOPPING →</button>' +
+        '<div class="fine">Nothing else to do — we will pack it with your order.</div>';
+    } else {
+      var isProduct = d.delivery === "product_code";
+      card.innerHTML =
+        '<div class="ov-icon">🎉</div><div class="ov-title">Your code</div>' +
+        '<div class="ov-msg">' + esc(label) + ' is saved for <b>' + esc(d.email || PLAYER_EMAIL) + '</b>.' +
+        (isProduct ? " " + esc(d.note || "") : (d.unique ? " Single-use, valid for " + (d.days || 7) + " days." : "")) + '</div>' +
+        codeBox(d.code) +
+        '<button class="btn3d gold" id="cShop">SHOP NOW →</button>' +
+        '<div class="fine">Paste the code at checkout. Copy it now — you will need it.</div>';
+      card.querySelector("#cCopy").onclick = function () { copyText(d.code, this); };
+    }
     card.querySelector("#cShop").onclick = function () {
-      window.location.href = "/discount/" + encodeURIComponent(code) + "?redirect=/collections/all";
+      window.location.href = d.code ? "/discount/" + encodeURIComponent(d.code) + "?redirect=" + shopUrl() : shopUrl();
     };
+  }
+
+  /* ---------------- play not allowed / loading ---------------- */
+  function renderBlocked(d, id) {
+    var m = META[id] || META[1];
+    var icon = { need_order: "🛍️", invalid_order: "🔎", old_order: "⌛", already_played: "🎟️", already_claimed: "🎁", not_live: "🎪", disabled: "🛠️" }[d.reason] || "🎪";
+    var title = { need_order: "Place an order to play", already_played: d.canClaim ? "You won!" : "Play used", already_claimed: "Already claimed", not_live: "Not open yet" }[d.reason] || m.title;
+    els.stage.innerHTML =
+      '<div class="locked"><div class="big">' + icon + '</div><h3>' + esc(title) + '</h3><p>' + esc(d.message || "Please try again in a moment.") + '</p>' +
+      (d.code ? codeBox(d.code) : "") +
+      (d.canClaim ? '<button class="btn3d gold" id="bClaim">CLAIM MY PRIZE →</button>' :
+        (d.reason === "not_live" && CFG.activeGame ? '<button class="btn3d gold" id="bToday">PLAY TODAY\'S GAME</button>' :
+         '<button class="btn3d gold" id="bShop">SHOP NOW →</button>')) +
+      '</div>';
+    var box = els.stage.querySelector.bind(els.stage);
+    if (d.canClaim) {
+      box("#bClaim").onclick = function () {
+        PLAY = { playRef: d.playRef, win: true, prize: { label: d.prizeLabel }, prizeLabel: d.prizeLabel, hint: d.hint, testMode: false };
+        var ov = document.createElement("div"); ov.className = "ov"; var card = document.createElement("div"); card.className = "ov-card";
+        ov.appendChild(card); els.stage.appendChild(ov); claimForm(card);
+      };
+    } else if (box("#bToday")) box("#bToday").onclick = function () { switchGame(CFG.activeGame); };
+    else if (box("#bShop")) box("#bShop").onclick = function () { window.location.href = shopUrl(); };
+    if (d.code && box("#cCopy")) box("#cCopy").onclick = function () { copyText(d.code, this); };
+  }
+
+  function renderLoading() {
+    els.stage.innerHTML = '<div class="locked"><div class="big">🎪</div><h3>Getting your play ready…</h3></div>';
   }
 
   /* ---------------- locked screen ---------------- */
   function renderLocked(id) {
     var m = META[id];
     var target = new Date(2026, 9, m.day, 0, 0, 0);
+    var ended = new Date() > new Date(2026, 9, 21, 0, 0, 0);
     els.stage.innerHTML =
       '<div class="locked"><div class="big">🔒</div><h3>' + esc(m.title) + '</h3>' +
-      '<p>Unlocks on ' + m.day + ' Oct</p>' +
+      '<p>' + (ended ? 'The Carnival has ended. Thank you for playing!' : 'Unlocks on ' + m.day + ' Oct') + '</p>' +
       '<div class="clock"><div><b id="ckD">0</b><small>DAYS</small></div><div><b id="ckH">00</b><small>HRS</small></div><div><b id="ckM">00</b><small>MIN</small></div><div><b id="ckS">00</b><small>SEC</small></div></div>' +
-      '<button class="btn3d gold" id="playToday">PLAY TODAY\'S GAME</button>' +
+      (CFG.activeGame ? '<button class="btn3d gold" id="playToday">PLAY TODAY\'S GAME</button>' : '') +
       (testMode ? '<br><button class="btn3d small" id="testGo" style="margin-top:10px">⚡ TEST: PLAY ANYWAY</button>' : '') +
       '</div>';
-    els.stage.querySelector("#playToday").onclick = function () { switchGame(CFG.activeGame); };
+    if (CFG.activeGame) els.stage.querySelector("#playToday").onclick = function () { switchGame(CFG.activeGame); };
     if (testMode) els.stage.querySelector("#testGo").onclick = function () { launch(id); };
     function pad(n) { return (n < 10 ? "0" : "") + n; }
     function tick() {
@@ -502,16 +560,29 @@
 
   function launch(id) {
     cleanup();
-    playNo++;
-    els.stage.innerHTML = "";
+    var token = launchToken;
+    attempt++;
+    PLAY = null;
     els.stage.className = "stage g" + id;
-    try {
-      if (!Games[id]) throw new Error("Game " + id + " not loaded");
-      Games[id](makeApi());
-    } catch (e) {
-      console.error(e);
-      els.stage.innerHTML = '<div class="locked"><div class="big">🎪</div><h3>Oops!</h3><p>This game could not load. Please refresh the page.</p></div>';
-    }
+    renderLoading();
+    post({ intent: "play", orderId: CFG.orderId, gameId: id, attempt: attempt, customerId: CFG.customerId || "" })
+      .then(function (d) {
+        if (token !== launchToken) return;
+        if (!d || !d.ok) { renderBlocked(d || {}, id); return; }
+        PLAY = d;
+        els.stage.innerHTML = "";
+        try {
+          if (!Games[id]) throw new Error("Game " + id + " not loaded");
+          Games[id](makeApi());
+        } catch (e) {
+          console.error(e);
+          els.stage.innerHTML = '<div class="locked"><div class="big">🎪</div><h3>Oops!</h3><p>This game could not load. Please refresh the page.</p></div>';
+        }
+      })
+      .catch(function () {
+        if (token !== launchToken) return;
+        renderBlocked({ message: "Connection problem. Please check your internet and try again." }, id);
+      });
   }
 
   function switchGame(id, force) {
@@ -650,7 +721,7 @@
       window.addEventListener("resize", fit);
       window.addEventListener("orientationchange", function () { setTimeout(fit, 200); });
       var first = CFG.initialGame || CFG.activeGame || 1;
-      if (isLocked(first)) first = CFG.activeGame || 1;
+      if (isLocked(first) && CFG.activeGame) first = CFG.activeGame;
       switchGame(first, true);
       fit();
       fortune();

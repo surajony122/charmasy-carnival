@@ -224,17 +224,12 @@ window.CarnivalGames[1] = function (C) {
     } else if (m === "close") {
       S.o = 1 + (S.oHold - 1) * ease(S.t / 0.8);
       if (S.t >= 0.8) {
-        var ok = false;
-        if (S.tgt) {
-          var off = Math.min(1, Math.abs(S.x - S.tgt.cx) / (S.tgt.w / 2));
-          var p = Math.max(0.5, S.tgt.grip * (1 - 0.2 * off));
-          ok = Math.random() < p;
-        }
+        var ok = !!S.tgt;                       // lined up over a box = the claw grips it
         if (ok) {
           S.hold = S.tgt; S.hold.state = "held";
-          S.slipAt = Math.random() < 0.06 ? 0.3 + Math.random() * 0.4 : -1;
-        } else if (S.tgt) {
-          S.msg = "The grip slipped! So close — try again.";
+          // the server already decided this play: a winning play carries the box to the chute,
+          // any other play lets it slip on the way up
+          S.slipAt = C.outcome.win ? -1 : 0.3 + Math.random() * 0.4;
         } else {
           S.msg = "Missed! Line the claw up over a gift box.";
         }
@@ -276,10 +271,7 @@ window.CarnivalGames[1] = function (C) {
         b.t += dt; b.scale = Math.max(0, 1 - b.t / 0.4);
         if (b.t >= 0.4) {
           b.state = "gone"; S.binT = 0; S.mode = "bin";
-          finish(true, {
-            title: "You got it!", icon: "🎁",
-            msg: "The claw delivered your gift box!", prize: C.prize(b.prize)
-          });
+          finish(true, { title: "You got it!", icon: "🎁", msg: "The claw delivered your gift box!" });
         }
       }
     });

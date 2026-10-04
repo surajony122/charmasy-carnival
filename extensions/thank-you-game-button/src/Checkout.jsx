@@ -5,52 +5,44 @@ export default async () => {
   render(<Extension />, document.body);
 };
 
+// Signals expose their data on .value (or .current); older runtimes hand back the plain object.
+const unwrap = (x) => (x && typeof x === 'object' && 'value' in x ? x.value : x && typeof x === 'object' && 'current' in x ? x.current : x);
+const lastPart = (gid) => (typeof gid === 'string' && gid ? gid.split('/').pop() : '');
+
 function Extension() {
-  const confirmation = shopify.orderConfirmation?.value || shopify.orderConfirmation?.current || shopify.orderConfirmation;
-  const rawOrderId = confirmation?.order?.id || '';
-  const orderNumber = confirmation?.number || '';
+  // Thank-you page: orderConfirmation. Customer-account order page: order.
+  const confirmation = unwrap(shopify.orderConfirmation);
+  const orderObj = unwrap(shopify.order);
 
-  const orderObj = shopify.order?.value || shopify.order?.current || shopify.order;
-  const directOrderId = orderObj?.id || '';
-  const directOrderName = orderObj?.name || '';
+  const orderId =
+    lastPart(confirmation?.order?.id) ||
+    lastPart(orderObj?.id) ||
+    String(confirmation?.number || '').replace('#', '') ||
+    String(orderObj?.name || '').replace('#', '');
 
-  let orderIdParam = '';
-  if (rawOrderId && typeof rawOrderId === 'string') {
-    orderIdParam = rawOrderId.split('/').pop();
-  } else if (orderNumber) {
-    orderIdParam = String(orderNumber);
-  } else if (directOrderName) {
-    orderIdParam = directOrderName.replace('#', '');
-  } else if (directOrderId && typeof directOrderId === 'string') {
-    orderIdParam = directOrderId.split('/').pop();
-  } else {
-    orderIdParam = 'ORDER_' + Date.now();
-  }
+  // No order to play for -> show nothing rather than a link that cannot work.
+  if (!orderId) return null;
 
-  const customerId = shopify.buyerIdentity?.customer?.id?.value 
-    || shopify.buyerIdentity?.customer?.id 
-    || shopify.customer?.id?.value 
-    || shopify.customer?.id 
-    || '';
-  const customerIdParam = customerId ? customerId.split('/').pop() : '';
-  const customerQuery = customerIdParam ? `&customer_id=${customerIdParam}` : '';
+  const customerId = lastPart(
+    unwrap(shopify.buyerIdentity?.customer)?.id ||
+    unwrap(shopify.authenticatedAccount?.customer)?.id ||
+    ''
+  );
+  const customerQuery = customerId ? `&customer_id=${customerId}` : '';
 
-  const storefrontUrl = shopify.shop?.storefrontUrl?.value || shopify.shop?.storefrontUrl || "https://ravistore-shop.myshopify.com";
-  const baseUrl = storefrontUrl.replace(/\/$/, "");
-  const gameUrl = `${baseUrl}/apps/carnival-games?order_id=${orderIdParam}${customerQuery}`;
+  const storefrontUrl = unwrap(shopify.shop?.storefrontUrl) || '';
+  const baseUrl = String(storefrontUrl).replace(/\/$/, '');
+  const gameUrl = `${baseUrl}/apps/carnival-games?order_id=${orderId}${customerQuery}`;
 
   return (
     <s-banner heading="Charmacy Carnival is LIVE!" tone="success">
-      <s-stack gap="base" blockAlignment="center">
+      <s-stack gap="base">
         <s-text>
-          Thank you for your order! You have unlocked 1 free play for today's Carnival Game.
+          Thank you for your order! This order gives you 1 play of today's Carnival game. Play now and you could win a coupon or a free gift.
         </s-text>
         <s-button href={gameUrl} target="_blank" variant="primary">
-          Play & Win a Free Gift
+          Play & Win
         </s-button>
-        <s-link href={gameUrl} target="_blank">
-          Click here to Play & Win (New Window)
-        </s-link>
       </s-stack>
     </s-banner>
   );

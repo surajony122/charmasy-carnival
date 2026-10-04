@@ -47,11 +47,52 @@ model GamePlay {
   email       String?
   couponCode  String?
   claimedAt   DateTime?
+  phone       String?
+  outcomeWin  Boolean?  // decided by the server when the play starts
+  prizeId     String?   // PrizeConfig id
+  prizeLabel  String?   // e.g. "10% OFF Coupon" or "FREE Velvet Lipstick"
+  prizeKind   String?   // PERCENT | AMOUNT | FREE_PRODUCT
+  rolledAt    DateTime?
+  finishedAt  DateTime?
+  delivery    String?   // code | order_edit | product_code
+  deliveryNote String?
 }
 
 model GameSettings {
   id           String  @id @default(cuid())
   shop         String  @unique
-  activeGameId Int     @default(1) // Which game is currently live today?
-  testMode     Boolean @default(true) // If true, all 9 games are unlocked for testing
+  activeGameId Int     @default(1) // used only when manualActive is true
+  manualActive Boolean @default(false) // false = the live game follows the calendar (12-20 Oct)
+  testMode     Boolean @default(true) // If true, all 9 games are unlocked and rules are relaxed for testing
+  couponDays   Int     @default(7)   // how long a won coupon stays valid
+  requireOrder Boolean @default(true) // a play needs a real order (one play per order)
+}
+
+// Per-game rules edited on the app's "Games & prizes" page.
+model GameConfig {
+  id          String  @id @default(cuid())
+  shop        String
+  gameId      Int
+  enabled     Boolean @default(true)
+  winChance   Int     @default(50) // % of plays that win a prize
+  dailyLimit  Int     @default(6)  // max prizes handed out per day for this game
+
+  @@unique([shop, gameId])
+}
+
+model PrizeConfig {
+  id           String  @id @default(cuid())
+  shop         String
+  gameId       Int
+  kind         String  // PERCENT | AMOUNT | FREE_PRODUCT
+  value        Int?    // percent (5, 10) or rupees (50, 100)
+  productId    String?
+  variantId    String?
+  productTitle String?
+  imageUrl     String?
+  share        Int     @default(1) // relative weight when a win is rolled
+  dailyLimit   Int?    // optional cap for this prize per day
+  active       Boolean @default(true)
+
+  @@index([shop, gameId])
 }

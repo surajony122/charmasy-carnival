@@ -30,7 +30,7 @@ window.CarnivalGames[3] = function (C) {
   function end(won) {
     if (over) return; over = true;
     C.timeout(function () {
-      if (won) C.result({ won: true, title: "10 masks!", icon: "🎭", msg: "You caught all 10 masks — what a catch!", prize: C.prize(C.weighted({ nia: 3, p5: 7 })) });
+      if (won) C.winOrNot({ title: "10 masks!", icon: "🎭", msg: "You caught all 10 masks — what a catch!" });
       else C.result({ won: false, title: "Time's up!", icon: "⏰", msg: "You caught " + masks + " of " + GOAL + " masks. Try again!" });
     }, 500);
   }

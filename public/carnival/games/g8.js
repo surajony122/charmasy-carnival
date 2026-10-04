@@ -5,10 +5,11 @@ window.CarnivalGames[8] = function (C) {
   var CX = 30, CY = 150, CW = 300, CH = 270;   // card area
   var NEED = 0.65, BRUSH = 13;
 
-  var win = Math.random() < 0.75;
-  var prizeKey = win ? C.weighted({ p5: 7, p10: 3 }) : null;
-  var prize = prizeKey ? C.prize(prizeKey) : null;
-  var big = prizeKey === "p10" ? "10%" : "5%";
+  var O = C.outcome;                 // decided by the server
+  var win = !!(O.win && O.prize);
+  var big = win ? O.prize.short : "";
+  var isGift = win && O.prize.kind === "FREE_PRODUCT";
+  var giftName = isGift ? O.prize.label.replace(/^FREE\s*/i, "") : "";
 
   /* ----- foil layer ----- */
   var foil = document.createElement("canvas"); foil.width = CW * 2; foil.height = CH * 2;
@@ -51,7 +52,7 @@ window.CarnivalGames[8] = function (C) {
   function reveal() {
     revealed = true; fade = 0;
     C.timeout(function () {
-      if (win) C.result({ won: true, title: "You won!", icon: "🎟️", msg: "Your scratch card is a winner!", prize: prize });
+      if (win) C.result({ won: true, title: "You won!", icon: "🎟️", msg: "Your scratch card is a winner!" });
       else C.result({ won: false, title: "Not this time", icon: "🎟️", msg: "No prize on this card. Scratch another!" });
     }, 1100);
   }
@@ -68,10 +69,15 @@ window.CarnivalGames[8] = function (C) {
     if (win) {
       for (var i = 0; i < 9; i++) { ctx.font = "26px sans-serif"; ctx.globalAlpha = 0.25; ctx.fillText(["✨", "🎀", "💖"][i % 3], CX + 30 + (i % 3) * 120 + (Math.floor(i / 3) % 2) * 20, CY + 38 + Math.floor(i / 3) * 100); }
       ctx.globalAlpha = 1;
-      D.text3d(ctx, big, CX + CW / 2, CY + 100, 96, "#e11d63", "#7a0a38");
-      D.text3d(ctx, "OFF", CX + CW / 2, CY + 178, 44, "#e11d63", "#7a0a38");
+      D.text3d(ctx, big, CX + CW / 2, CY + 100, big.length > 3 ? 76 : 96, "#e11d63", "#7a0a38");
+      if (isGift) {
+        ctx.fillStyle = "#a10f4d"; ctx.font = "700 20px Fredoka, sans-serif";
+        ctx.fillText(giftName.length > 22 ? giftName.slice(0, 21) + "…" : giftName, CX + CW / 2, CY + 172);
+      } else {
+        D.text3d(ctx, "OFF", CX + CW / 2, CY + 178, 44, "#e11d63", "#7a0a38");
+      }
       ctx.fillStyle = "#a10f4d"; D.rr(ctx, CX + CW / 2 - 70, CY + 214, 140, 30, 15); ctx.fill();
-      ctx.fillStyle = "#fff"; ctx.font = "700 14px Fredoka, sans-serif"; ctx.fillText("COUPON", CX + CW / 2, CY + 229);
+      ctx.fillStyle = "#fff"; ctx.font = "700 14px Fredoka, sans-serif"; ctx.fillText(isGift ? "FREE GIFT" : "COUPON", CX + CW / 2, CY + 229);
     } else {
       ctx.font = "70px sans-serif"; ctx.fillText("🎈", CX + CW / 2, CY + 95);
       D.text3d(ctx, "OH NO!", CX + CW / 2, CY + 170, 40, "#a10f4d", "#ffd0e0");

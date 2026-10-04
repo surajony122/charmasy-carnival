@@ -59,7 +59,7 @@ window.CarnivalGames[5] = function (C) {
       a.b.classList.add("hit"); b.b.classList.add("hit");
       msg.textContent = "It's a match! 🎉";
       over = true;
-      C.timeout(function () { C.result({ won: true, title: "Perfect match!", icon: "🃏", msg: "You found the matching " + SPECIAL.n + "!", prize: C.prize("p5") }); }, 1100);
+      C.timeout(function () { C.winOrNot({ title: "Perfect match!", icon: "🃏", msg: "You found the matching " + SPECIAL.n + "!" }); }, 1100);
     } else {
       chances--; drawHearts();
       if (chances <= 0) {
