@@ -18,9 +18,12 @@ if (url.startsWith("file:")) {
     mkdirSync(dir, { recursive: true });
     accessSync(dir, constants.W_OK);
     try {
-      if (dir.startsWith("/var/data") && !readFileSync("/proc/mounts", "utf8").includes(" /var/data ")) {
-        console.warn("[start] WARNING: /var/data is not a mounted disk — data will be lost on every restart. Add a Render disk mounted at /var/data.");
-      }
+      const mounts = readFileSync("/proc/mounts", "utf8").split("\n").map((l) => l.split(" ")).filter((p) => p.length > 2);
+      let best = null;
+      for (const [, mp, fs] of mounts) if ((dir === mp || dir.startsWith(mp.endsWith("/") ? mp : mp + "/")) && (!best || mp.length > best.mp.length)) best = { mp, fs };
+      if (!best || best.mp === "/" || ["overlay", "tmpfs"].includes(best.fs)) {
+        console.warn(`[start] WARNING: ${dir} is NOT on a persistent disk — data will be lost on every update/restart. Add a Render disk and set DATABASE_URL=file:/var/data/carnival.sqlite`);
+      } else console.log(`[start] Database folder ${dir} is on persistent mount ${best.mp}`);
     } catch {}
   } catch (e) {
     console.warn(`[start] ${dir} is not writable (${e.code}); using ${DEFAULT_URL} — data will NOT persist.`);

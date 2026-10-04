@@ -14,9 +14,11 @@ import {
   Tabs,
   Button,
   Select,
+  Banner,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { storageStatus } from "../carnival/storage.server";
 
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -68,11 +70,11 @@ export const loader = async ({ request }) => {
 
   const settings = settingsRecord || { testMode: true, activeGameId: 1, manualActive: false };
 
-  return json({ plays, settings });
+  return json({ plays, settings, storage: storageStatus() });
 };
 
 export default function Index() {
-  const { plays, settings } = useLoaderData();
+  const { plays, settings, storage } = useLoaderData();
   const submit = useSubmit();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
@@ -148,6 +150,19 @@ export default function Index() {
       <Layout>
         <Layout.Section>
           <BlockStack gap="500">
+            {storage.persistent === false ? (
+              <Banner tone="critical" title="Your data is NOT being saved between updates">
+                <BlockStack gap="100">
+                  <Text as="p">{storage.message}</Text>
+                  <Text as="p" variant="bodySm">Database file: {storage.path} {storage.envSet ? "" : "(DATABASE_URL is not set)"}</Text>
+                  <Text as="p" variant="bodySm">Fix: in Render add a Disk to this service (mount path /var/data), then set the environment variable DATABASE_URL to file:/var/data/carnival.sqlite and redeploy.</Text>
+                </BlockStack>
+              </Banner>
+            ) : storage.persistent === true ? (
+              <Banner tone="success" title="Data storage is safe">
+                <Text as="p" variant="bodySm">{storage.message} {storage.sizeKB != null ? `Database size: ${storage.sizeKB} KB.` : ""}</Text>
+              </Banner>
+            ) : null}
             <Card>
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
