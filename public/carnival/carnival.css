@@ -355,22 +355,36 @@ body::before {
 .fortune-card { width: min(340px, 100%); text-align: center; padding: 22px 18px 20px; border-radius: 26px; background: linear-gradient(#fff, #fff1f6); box-shadow: 0 8px 0 #c2185b, 0 24px 40px rgba(0,0,0,.45); }
 .fortune-card h3 { color: var(--hot); text-transform: uppercase; font-size: 20px; letter-spacing: 1px; }
 .fortune-card p.sub { font-size: 13px; margin: 4px 0 8px; color: #7a3d57; }
-.cookie-stage { position: relative; height: 170px; display: grid; place-items: center; }
-.cookie { font-size: 104px; line-height: 1; cursor: pointer; filter: drop-shadow(0 14px 8px rgba(120,60,0,.35)); transition: transform .2s; user-select: none; background: none; border: 0; }
-.cookie.shake { animation: shake .5s ease-in-out; }
-.cookie.cracked { transform: scale(.82) translateY(34px) rotate(-8deg); }
-@keyframes shake { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-14deg); } 40% { transform: rotate(12deg); } 60% { transform: rotate(-10deg); } 80% { transform: rotate(8deg); } }
-.slip {
-  position: absolute; left: 50%; top: 18px;
-  width: 250px; min-height: 40px; padding: 9px 12px;
-  background: #fffdf5; color: #3a2a1a; font: italic 500 14px/1.35 Georgia, "Times New Roman", serif;
-  box-shadow: 0 6px 12px rgba(0,0,0,.28);
-  border-top: 2px solid #f3e6c4; border-bottom: 2px solid #f3e6c4;
-  transform: translateX(-50%) scaleY(0); transform-origin: 50% 100%;
-  opacity: 0;
+.cookie-stage { position: relative; height: 210px; margin: 4px 0 8px; display: grid; place-items: center; }
+.ck {
+  position: relative; width: 170px; height: 140px; border: 0; padding: 0; background: none; cursor: pointer;
+  filter: drop-shadow(0 14px 8px rgba(120,60,0,.38)); z-index: 3; -webkit-tap-highlight-color: transparent;
 }
-.slip.out { animation: slipOut .9s .1s cubic-bezier(.2,1.3,.4,1) forwards; }
-@keyframes slipOut { 0% { opacity: 0; transform: translateX(-50%) translateY(70px) scaleY(.1); } 100% { opacity: 1; transform: translateX(-50%) translateY(0) scaleY(1); } }
+.ck .half { position: absolute; inset: 0; transition: transform .6s cubic-bezier(.2,1.25,.4,1); }
+.ck .half { display: grid; place-items: center; }
+.ck .cke { font: normal 400 128px/1 "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; display: block; filter: saturate(1.15); }
+.ck .half.l { clip-path: polygon(0 0, 50% 0, 46% 14%, 54% 28%, 45% 44%, 55% 58%, 47% 74%, 53% 88%, 49% 100%, 0 100%); transform-origin: 30% 60%; }
+.ck .half.r { clip-path: polygon(50% 0, 100% 0, 100% 100%, 49% 100%, 53% 88%, 47% 74%, 55% 58%, 45% 44%, 54% 28%, 46% 14%); transform-origin: 70% 60%; }
+.ck.shake { animation: shake .55s ease-in-out; }
+.ck.cracked .half.l { transform: translate(-42px, 14px) rotate(-18deg); }
+.ck.cracked .half.r { transform: translate(42px, 14px) rotate(18deg); }
+.slip {
+  position: absolute; left: 50%; top: 50%; z-index: 2;
+  width: 236px; padding: 9px 14px; text-align: center;
+  background: #fffdf5; color: #3a2a1a; font: italic 500 14px/1.35 Georgia, "Times New Roman", serif;
+  box-shadow: 0 6px 12px rgba(0,0,0,.3);
+  border-top: 2px solid #f1e3bd; border-bottom: 2px solid #f1e3bd;
+  transform: translate(-50%, 8px) scaleY(.12); transform-origin: 50% 100%; opacity: 0; pointer-events: none;
+}
+.slip.out { z-index: 4; animation: slipOut 1.05s cubic-bezier(.2,1.2,.4,1) forwards; }
+@keyframes slipOut {
+  0% { opacity: 0; transform: translate(-50%, 8px) scaleY(.12) rotate(0); }
+  25% { opacity: 1; }
+  100% { opacity: 1; transform: translate(-50%, -88px) scaleY(1) rotate(-2deg); }
+}
+.crumb { position: absolute; left: 50%; top: 50%; z-index: 5; border-radius: 50%; background: #d9922c; pointer-events: none; animation: crumb .8s ease-out forwards; }
+@keyframes crumb { from { opacity: 1; transform: translate(-50%, -50%) scale(1); } to { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 30px)) scale(.4) rotate(200deg); } }
+@keyframes shake { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(-12deg); } 35% { transform: rotate(10deg); } 55% { transform: rotate(-8deg); } 75% { transform: rotate(6deg); } }
 
 @media (min-width: 900px) {
   .wrap { max-width: 700px; }

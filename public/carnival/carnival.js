@@ -553,6 +553,47 @@
     "You are more radiant than you realise.",
     "Celebrate yourself today. You deserve it."
   ];
+  /* ----- crack sound, synthesized (no audio files) ----- */
+  var audio = null;
+  function audioCtx() {
+    try {
+      if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state === "suspended") audio.resume();
+    } catch (e) { audio = null; }
+    return audio;
+  }
+  function noiseBurst(ac, at, dur, gain, hp) {
+    var n = Math.max(1, Math.floor(ac.sampleRate * dur)), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+    for (var i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
+    var src = ac.createBufferSource(); src.buffer = buf;
+    var f = ac.createBiquadFilter(); f.type = "highpass"; f.frequency.value = hp;
+    var g = ac.createGain(); g.gain.value = gain;
+    src.connect(f); f.connect(g); g.connect(ac.destination); src.start(at);
+  }
+  function crackSound() {
+    var ac = audioCtx(); if (!ac) return;
+    var t = ac.currentTime;
+    noiseBurst(ac, t, 0.05, 0.9, 2500);          // sharp snap
+    noiseBurst(ac, t + 0.045, 0.07, 0.7, 1800);  // crunch
+    noiseBurst(ac, t + 0.11, 0.09, 0.5, 1200);   // crumble
+    noiseBurst(ac, t + 0.2, 0.12, 0.25, 800);
+    var o = ac.createOscillator(), og = ac.createGain();   // low "thump"
+    o.type = "sine"; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(55, t + 0.12);
+    og.gain.setValueAtTime(0.5, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    o.connect(og); og.connect(ac.destination); o.start(t); o.stop(t + 0.15);
+  }
+  function rattleSound() {
+    var ac = audioCtx(); if (!ac) return;
+    var t = ac.currentTime;
+    for (var i = 0; i < 5; i++) noiseBurst(ac, t + i * 0.09, 0.03, 0.22, 3000);
+  }
+  function slipSound() {
+    var ac = audioCtx(); if (!ac) return;
+    noiseBurst(ac, ac.currentTime, 0.28, 0.12, 5000);   // soft paper "swish"
+  }
+
+  var COOKIE_SVG = "<b class=\"cke\">🥠</b>";   // the glossy cookie, split into two halves by CSS
+
   function fortune() {
     var fab = document.createElement("button");
     fab.className = "fortune-fab"; fab.setAttribute("aria-label", "Open a fortune cookie");
@@ -564,24 +605,40 @@
       ov.innerHTML =
         '<div class="fortune-card"><h3>Fortune Cookie</h3>' +
         '<p class="sub">Need a little bit of sage advice or a quick pick-me-up? Crack one open!</p>' +
-        '<div class="cookie-stage"><div class="slip" id="slip"></div><button class="cookie" id="cookie" aria-label="Crack the cookie">🥠</button></div>' +
+        '<div class="cookie-stage"><div class="slip" id="slip"></div>' +
+        '<button class="ck" id="ck" aria-label="Crack the cookie"><span class="half l">' + COOKIE_SVG + '</span><span class="half r">' + COOKIE_SVG + '</span></button></div>' +
         '<button class="btn3d" id="crack">CRACK IT OPEN</button> <button class="btn3d small gold" id="shut" style="margin-left:6px">CLOSE</button></div>';
       document.body.appendChild(ov);
-      var cookie = ov.querySelector("#cookie"), slip = ov.querySelector("#slip"), crack = ov.querySelector("#crack");
-      function open() {
-        cookie.classList.remove("shake"); void cookie.offsetWidth;
-        cookie.classList.add("shake");
-        slip.classList.remove("out");
-        setTimeout(function () {
-          cookie.classList.add("cracked");
-          slip.textContent = pickOne(QUOTES); void slip.offsetWidth; slip.classList.add("out");
-          crack.textContent = "ANOTHER ONE";
-        }, 520);
-        setTimeout(function () { cookie.classList.remove("cracked"); }, 2600);
+      var ck = ov.querySelector("#ck"), slip = ov.querySelector("#slip"), crack = ov.querySelector("#crack"), stage = ov.querySelector(".cookie-stage");
+      var busy = false, timers = [];
+      function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+      function crumbs() {
+        for (var i = 0; i < 14; i++) {
+          var c = document.createElement("i"); c.className = "crumb";
+          var a = Math.random() * Math.PI * 2, r = 40 + Math.random() * 60;
+          c.style.setProperty("--dx", Math.cos(a) * r + "px"); c.style.setProperty("--dy", (Math.sin(a) * r * 0.7 - 10) + "px");
+          c.style.width = c.style.height = (3 + Math.random() * 5) + "px";
+          stage.appendChild(c); later(function (el) { return function () { el.remove(); }; }(c), 900);
+        }
       }
-      cookie.onclick = open; crack.onclick = open;
-      ov.querySelector("#shut").onclick = function () { ov.remove(); };
-      ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
+      function open() {
+        if (busy) return; busy = true; crack.disabled = true;
+        // reset to a whole cookie first
+        ck.classList.remove("cracked", "shake"); slip.classList.remove("out"); slip.textContent = "";
+        void ck.offsetWidth;
+        ck.classList.add("shake"); rattleSound();
+        later(function () {
+          crackSound(); crumbs();
+          slip.textContent = pickOne(QUOTES);
+          ck.classList.remove("shake"); ck.classList.add("cracked");
+        }, 560);
+        later(function () { slipSound(); slip.classList.add("out"); }, 760);
+        later(function () { busy = false; crack.disabled = false; crack.textContent = "ANOTHER ONE"; }, 1900);
+      }
+      ck.onclick = open; crack.onclick = open;
+      function close() { timers.forEach(clearTimeout); ov.remove(); }
+      ov.querySelector("#shut").onclick = close;
+      ov.onclick = function (e) { if (e.target === ov) close(); };
     };
   }
 

@@ -14,9 +14,9 @@ window.CarnivalGames[1] = function (C) {
   var PRONG = 48;
 
   var SIZES = {
-    L: { w: 68, h: 62, d: 26, grip: 0.5 },
-    M: { w: 54, h: 48, d: 21, grip: 0.62 },
-    S: { w: 40, h: 36, d: 16, grip: 0.74 }
+    L: { w: 68, h: 62, d: 26, grip: 0.88 },
+    M: { w: 54, h: 48, d: 21, grip: 0.92 },
+    S: { w: 40, h: 36, d: 16, grip: 0.95 }
   };
   var LAYOUT = [
     // back row (drawn first, sits higher)
@@ -154,7 +154,7 @@ window.CarnivalGames[1] = function (C) {
     var best = null;
     boxes.forEach(function (b) {
       if (b.state !== "rest") return;
-      if (Math.abs(x - b.cx) <= b.w / 2 + 6) {
+      if (Math.abs(x - b.cx) <= b.w / 2 + 14) {
         var top = b.by - b.h;
         if (!best || top < best.by - best.h) best = b;
       }
@@ -218,6 +218,7 @@ window.CarnivalGames[1] = function (C) {
       S.dir = (keys.r ? 1 : 0) - (keys.l ? 1 : 0);
       S.x = Math.max(MIN_X, Math.min(MAX_X, S.x + S.dir * SPEED.move * dt));
     } else if (m === "down") {
+      if (S.tgt) S.x += (S.tgt.cx - S.x) * Math.min(1, dt * 4);
       S.len += SPEED.down * dt;
       if (tipY() >= S.stopTip) { S.mode = "close"; S.t = 0; S.oHold = S.tgt ? Math.max(0.15, (S.tgt.w / 2 - 4) / 30) : 0; }
     } else if (m === "close") {
@@ -225,13 +226,13 @@ window.CarnivalGames[1] = function (C) {
       if (S.t >= 0.8) {
         var ok = false;
         if (S.tgt) {
-          var off = Math.abs(S.x - S.tgt.cx) / (S.tgt.w / 2);
-          var p = Math.max(0.15, S.tgt.grip * (1 - 0.5 * off));
+          var off = Math.min(1, Math.abs(S.x - S.tgt.cx) / (S.tgt.w / 2));
+          var p = Math.max(0.5, S.tgt.grip * (1 - 0.2 * off));
           ok = Math.random() < p;
         }
         if (ok) {
           S.hold = S.tgt; S.hold.state = "held";
-          S.slipAt = Math.random() < 0.28 ? 0.25 + Math.random() * 0.5 : -1;
+          S.slipAt = Math.random() < 0.06 ? 0.3 + Math.random() * 0.4 : -1;
         } else if (S.tgt) {
           S.msg = "The grip slipped! So close — try again.";
         } else {
@@ -371,13 +372,29 @@ window.CarnivalGames[1] = function (C) {
       var sp = (Math.floor(S.binT * 8) % 2) ? "✨" : "⭐"; ctx.fillText(sp, 100, 478); ctx.fillText(sp, 46, 492);
     }
 
+    // aim marker: shows which box the claw will grab if you press DROP now
+    if (S.mode === "idle") {
+      var aim = boxUnder(S.x);
+      var bounce = Math.sin(time * 6) * 3;
+      ctx.save();
+      ctx.setLineDash([4, 5]); ctx.strokeStyle = "rgba(225,29,99,.55)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(S.x, hubY() + PRONG + 4); ctx.lineTo(S.x, aim ? aim.by - aim.h - 14 : FLOOR - 4); ctx.stroke();
+      ctx.setLineDash([]);
+      if (aim) {
+        var ay = aim.by - aim.h - 18 + bounce;
+        ctx.fillStyle = "#ffc93c"; ctx.strokeStyle = "#a10f4d"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(aim.cx - 9, ay - 12); ctx.lineTo(aim.cx + 9, ay - 12); ctx.lineTo(aim.cx, ay); ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     // first-time hint
     if (!started && S.mode === "idle") {
       var pulse = 0.55 + 0.45 * Math.sin(time * 4);
       ctx.save(); ctx.globalAlpha = pulse;
-      ctx.fillStyle = "rgba(161,15,77,.9)"; D.rr(ctx, 70, 230, 220, 32, 16); ctx.fill();
+      ctx.fillStyle = "rgba(161,15,77,.9)"; D.rr(ctx, 48, 230, 264, 32, 16); ctx.fill();
       ctx.fillStyle = "#fff"; ctx.font = "600 13px Fredoka, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText("Hold ◀ ▶ to move, then press DROP", 180, 246);
+      ctx.fillText("Line up over a box, then press DROP", 180, 246);
       ctx.restore();
     }
   }
