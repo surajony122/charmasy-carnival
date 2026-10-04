@@ -4,7 +4,11 @@ import { dirname, resolve } from "node:path";
 
 export function storageStatus(mountsText) {
   const url = process.env.DATABASE_URL || "file:./dev.sqlite";
-  if (!url.startsWith("file:")) return { kind: "external", url: url.replace(/:\/\/[^@]*@/, "://***@"), persistent: true, message: "Using an external database server." };
+  if (!url.startsWith("file:")) {
+    let host = "";
+    try { host = new URL(url).hostname; } catch (e) {}
+    return { kind: "external", persistent: true, sizeKB: null, message: `Using the PostgreSQL database server${host ? " (" + host + ")" : ""}. It keeps your data across updates and restarts.` };
+  }
 
   const raw = url.slice(5).split("?")[0];
   const abs = raw.startsWith("/") ? raw : resolve("prisma", raw);

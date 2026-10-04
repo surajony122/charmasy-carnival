@@ -12,7 +12,7 @@
     "env": "shopify app env",
     "start": "node scripts/start.mjs",
     "docker-start": "npm run setup && npm run start",
-    "setup": "export DATABASE_URL=${DATABASE_URL:-file:./dev.sqlite} && prisma generate && prisma migrate deploy",
+    "setup": "prisma generate",
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
     "shopify": "shopify",
     "prisma": "prisma",
