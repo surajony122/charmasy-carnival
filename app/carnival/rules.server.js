@@ -135,3 +135,13 @@ export async function prizeForPlay(shop, play) {
   }
   return prisma.prizeConfig.findUnique({ where: { id: play.prizeId } });
 }
+
+// Runs jobs with the same key one after another (this app runs as a single server process).
+// Used so "check how many prizes are left" and "reserve one" can never interleave between two players.
+const lockTails = new Map();
+export function withLock(key, job) {
+  const prev = lockTails.get(key) || Promise.resolve();
+  const run = prev.then(job, job);
+  lockTails.set(key, run.catch(() => {}));
+  return run;
+}

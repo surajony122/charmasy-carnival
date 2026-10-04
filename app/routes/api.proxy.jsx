@@ -3,7 +3,7 @@ import { json } from "@remix-run/node";
 import prisma from "../db.server";
 import { buildPage } from "../carnival-page";
 import {
-  GAME_NAMES, activeGameFor, getSettings, loadGame, openPrizes, rollOutcome, prizeForPlay,
+  GAME_NAMES, activeGameFor, getSettings, loadGame, openPrizes, rollOutcome, prizeForPlay, withLock,
 } from "../carnival/rules.server";
 import {
   maskEmail, normalizePhone, resolveOrder, upsertCustomer, saveWinToCustomer, createCustomerCode, addFreeProductToOrder,
@@ -111,21 +111,23 @@ async function handlePlay(ctx, fd) {
     };
   }
 
-  const o = await rollOutcome(shop, gameId);
-  try {
-    await prisma.gamePlay.create({
-      data: {
-        shop, orderId: playRef, customerId: customerId || null, gameId, won: false,
-        outcomeWin: o.win, prizeId: o.prize?.id || null, prizeLabel: o.prize?.label || null, prizeKind: o.prize?.kind || null,
-        rolledAt: new Date(),
-      },
-    });
-  } catch (e) {
-    // two requests for the same order at once: the other one won, use its outcome
-    row = await prisma.gamePlay.findUnique({ where: { orderId: playRef } });
-    if (!row) throw e;
-    return fail("already_played", "You've already used the play for this order.");
-  }
+  // Roll and reserve in one step per game, so the daily prize limit holds even when many people play at once.
+  let o = null, duplicate = false;
+  await withLock(`${shop}:${gameId}`, async () => {
+    o = await rollOutcome(shop, gameId);
+    try {
+      await prisma.gamePlay.create({
+        data: {
+          shop, orderId: playRef, customerId: customerId || null, gameId, won: false,
+          outcomeWin: o.win, prizeId: o.prize?.id || null, prizeLabel: o.prize?.label || null, prizeKind: o.prize?.kind || null,
+          rolledAt: new Date(),
+        },
+      });
+    } catch (e) {
+      duplicate = true; // the same order started a play a moment ago: it keeps that one
+    }
+  });
+  if (duplicate) return fail("already_played", "You've already used the play for this order.");
   return {
     ok: true, success: true, playRef, resumed: false, win: o.win, soldOut: !!o.soldOut, testMode: adminTest,
     prize: publicPrize(o.prize), prizes: o.prizes, orderName: order?.name || "", hint: order ? maskEmail(order.email) : "",
