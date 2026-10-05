@@ -52,7 +52,7 @@ _Last updated: 2026-10-05. Campaign: 12–20 Oct 2026, one game per day._
   Render's Environment tab - never commit it). The old SQLite file was erased on every deploy, which is why it was replaced.
 - `scripts/start.mjs` refuses to start without a `postgresql://` URL and runs `prisma db push` **without** `--accept-data-loss`.
 - Prize-limit checks are serialized in-process (`withLock`), so keep the web service on ONE instance.
-- Home page of the app shows a green/red "Data storage" banner.
+- Home page of the app shows a green/red "Data storage" banner (green confirmed on the live app, 2026-10-05).
 
 ## Still open
 - Emailing the code (not built; code is shown on screen and saved on the customer profile).
