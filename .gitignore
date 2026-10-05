@@ -26,3 +26,4 @@ database.sqlite
 
 # Helper dev scripts
 *.py
+/public/carnival/all.js

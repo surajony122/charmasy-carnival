@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import { json } from "@remix-run/node";
 import prisma from "../db.server";
+import { existsSync } from "node:fs";
 import { buildPage } from "../carnival-page";
 import {
   GAME_NAMES, activeGameFor, getSettings, loadGame, openPrizes, rollOutcome, prizeForPlay, withLock,
@@ -8,6 +9,9 @@ import {
 import {
   maskEmail, normalizePhone, resolveOrder, upsertCustomer, saveWinToCustomer, createCustomerCode, addFreeProductToOrder,
 } from "../carnival/shopify-ops.server";
+
+// The build step combines the game files into one file; fall back to the separate files if it is missing.
+const BUNDLED = existsSync("build/client/carnival/all.js") || existsSync("public/carnival/all.js");
 
 const DEFAULT_SHOP = "ravistore-shop.myshopify.com";
 const LEGACY_CODES = { 5: "CARNIVAL5", 10: "CARNIVAL10", 50: "CARNIVAL50", 100: "CARNIVAL100", GIFT: "FREESTELLAR" };
@@ -282,6 +286,7 @@ export const loader = async ({ request }) => {
   const html = buildPage({
     assets: appUrl + "/carnival",
     version,
+    bundled: BUNDLED,
     cfg: { orderId, customerId, orderBadge, initialGame, isTest, activeGame },
   });
   return new Response(html, { headers: { "Content-Type": "application/liquid" } });
