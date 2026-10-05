@@ -1,7 +1,7 @@
 import { authenticate } from "../shopify.server";
 import { json } from "@remix-run/node";
 import prisma from "../db.server";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { buildPage } from "../carnival-page";
 import {
   GAME_NAMES, activeGameFor, getSettings, loadGame, openPrizes, rollOutcome, prizeForPlay, withLock,
@@ -12,6 +12,14 @@ import {
 
 // The build step combines the game files into one file; fall back to the separate files if it is missing.
 const BUNDLED = existsSync("build/client/carnival/all.js") || existsSync("public/carnival/all.js");
+
+// Stylesheet text, inlined into the page (read once when the server starts).
+const CSS = (() => {
+  for (const f of ["build/client/carnival/carnival.css", "public/carnival/carnival.css"]) {
+    try { if (existsSync(f)) return readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\s+/g, " "); } catch (e) {}
+  }
+  return "";
+})();
 
 const DEFAULT_SHOP = "ravistore-shop.myshopify.com";
 const LEGACY_CODES = { 5: "CARNIVAL5", 10: "CARNIVAL10", 50: "CARNIVAL50", 100: "CARNIVAL100", GIFT: "FREESTELLAR" };
@@ -287,6 +295,7 @@ export const loader = async ({ request }) => {
     assets: appUrl + "/carnival",
     version,
     bundled: BUNDLED,
+    css: CSS,
     cfg: { orderId, customerId, orderBadge, initialGame, isTest, activeGame },
   });
   return new Response(html, { headers: { "Content-Type": "application/liquid" } });

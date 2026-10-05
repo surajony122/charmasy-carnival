@@ -1,5 +1,5 @@
 // Builds the HTML shell for the storefront game hub. The games themselves live in public/carnival/*.
-export function buildPage({ assets, version, cfg, bundled }) {
+export function buildPage({ assets, version, cfg, bundled, css }) {
   // JSON for an inline <script>: escape characters that could end the script or open Liquid tags.
   // Strings are stripped of braces/percent (Liquid) and "<" (script end) before being embedded.
   const safe = (v) =>
@@ -36,13 +36,16 @@ export function buildPage({ assets, version, cfg, bundled }) {
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Charmacy Carnival 2026</title>
   ${origin ? `<link rel="preconnect" href="${origin}" crossorigin>` : ""}
-  <link rel="preload" href="${assets}/carnival.css?v=${version}" as="style">
+  ${css ? "" : `<link rel="preload" href="${assets}/carnival.css?v=${version}" as="style">`}
   ${bundled ? `<link rel="preload" href="${assets}/all.js?v=${version}" as="script">` : ""}
   <link rel="preload" href="${assets}/img/bg.jpg" as="image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="${assets}/carnival.css?v=${version}">
+  ${css
+    // Inlined so the first paint does not wait for another download (image paths made absolute).
+    ? `<style>${css.replace(/url\("img\//g, `url("${assets}/img/`)}</style>`
+    : `<link rel="stylesheet" href="${assets}/carnival.css?v=${version}">`}
 </head>
 <body>
   <div id="app"></div>
