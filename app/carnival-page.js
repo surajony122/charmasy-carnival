@@ -13,20 +13,6 @@ export function buildPage({ assets, version, cfg, bundled }) {
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Charmacy Carnival 2026</title>
-  ${origin ? `<link rel="preconnect" href="${origin}" crossorigin>` : ""}
-  <link rel="preload" href="${assets}/carnival.css?v=${version}" as="style">
-  ${bundled ? `<link rel="preload" href="${assets}/all.js?v=${version}" as="script">` : ""}
-  <link rel="preload" href="${assets}/img/bg.jpg" as="image">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="${assets}/carnival.css?v=${version}">
-</head>
-<body>
-  <div id="app"></div>
-  <noscript><p style="padding:24px;text-align:center">Please enable JavaScript to play the Carnival games.</p></noscript>
   <script>
     window.CARNIVAL = Object.assign(${safe(cfg)}, {
       assets: ${safe(assets)},
@@ -47,6 +33,20 @@ export function buildPage({ assets, version, cfg, bundled }) {
       } catch (e) {}
     })();
   </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Charmacy Carnival 2026</title>
+  ${origin ? `<link rel="preconnect" href="${origin}" crossorigin>` : ""}
+  <link rel="preload" href="${assets}/carnival.css?v=${version}" as="style">
+  ${bundled ? `<link rel="preload" href="${assets}/all.js?v=${version}" as="script">` : ""}
+  <link rel="preload" href="${assets}/img/bg.jpg" as="image">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="${assets}/carnival.css?v=${version}">
+</head>
+<body>
+  <div id="app"></div>
+  <noscript><p style="padding:24px;text-align:center">Please enable JavaScript to play the Carnival games.</p></noscript>
   ${scripts}
   <script>window.Carnival.start();</script>
 </body>
