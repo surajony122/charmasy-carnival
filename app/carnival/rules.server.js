@@ -55,7 +55,7 @@ export async function getSettings(shop) {
   } catch (e) {
     console.error("Failed to read settings:", e);
   }
-  return st || { testMode: false, manualActive: false, activeGameId: 1, couponDays: 7, requireOrder: true, freeGiftDailyLimit: 6 };
+  return st || { testMode: false, manualActive: false, activeGameId: 1, couponDays: 7, requireOrder: true, freeGiftDailyLimit: 6, spreadFreeGifts: true };
 }
 
 export async function loadGame(shop, gameId) {
@@ -92,7 +92,12 @@ export async function openPrizes(shop, gameId) {
   const settings = await getSettings(shop);
   const freeLimit = settings.freeGiftDailyLimit ?? 6;
   const freeUsed = await prisma.gamePlay.count({ where: usedWhere(shop, null, dayStart, { prizeKind: "FREE_PRODUCT" }) });
-  const freeLeft = freeLimit - freeUsed;
+  // Spread through the day (India time): 1 gift is available from midnight, then one more every 24h / limit
+  // (every 4 hours for 6). Gifts nobody won earlier stay available later in the same day.
+  const spread = settings.spreadFreeGifts !== false;
+  const dayFrac = Math.min(0.999999, (Date.now() - dayStart.getTime()) / 86400000);
+  const releasedByNow = spread ? Math.min(freeLimit, Math.floor(freeLimit * dayFrac) + 1) : freeLimit;
+  const freeLeft = Math.min(freeLimit, releasedByNow) - freeUsed;
   const open = [];
   for (const p of prizes) {
     if (!isDeliverable(p)) continue;

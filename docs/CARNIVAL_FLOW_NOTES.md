@@ -58,6 +58,10 @@ _Last updated: 2026-10-05. Campaign: 12–20 Oct 2026, one game per day._
 - Standard coupon mix (default for every game, set with the "Apply the standard coupon mix" button on Games & prizes):
   5% OFF 90% / 10% OFF 10%, and Rs 50 OFF 90% / Rs 100 OFF 10%; percent and rupee coupons equally likely.
 - Free gifts: max **6 per day across ALL games together** (setting "Free gifts per day"); after that games only give coupons.
+- Free gifts are released through the day (India time), e.g. for 6: 1 from midnight, one more every 4 hours; unclaimed
+  ones roll forward. Setting "Spread the free gifts through the day" turns this off. Customers are NEVER told the limit.
+- Timers: locked games show a live countdown (India time); after a play, "Next game opens in ..." is shown on the result,
+  already-played screens and the desktop info column.
 - Per-game "max prizes per day" (default 6) still applies to all prize types of that game - raise it if coupons should be unlimited.
 
 ## Desktop layout (2026-10-08)

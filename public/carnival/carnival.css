@@ -475,3 +475,9 @@ body.desk .foot { margin-top: 28px; }
   body.desk .hdr { min-height: 62px; }
   body.desk .tabs { padding: 2px 0 12px; }
 }
+
+/* "Next game opens in ..." timer */
+.next-timer { margin-top: 12px; display: inline-block; max-width: 100%; font-size: 12px; font-weight: 600; color: var(--deep); background: #fff3c4; border-radius: 14px; padding: 7px 12px; box-shadow: 0 3px 0 #c79a1a; line-height: 1.35; }
+.nt-clock { font-variant-numeric: tabular-nums; color: var(--hot); }
+.locked .next-timer { margin-top: 16px; }
+.side-next { margin-top: 14px; text-align: center; }

@@ -7,6 +7,33 @@
   var W = 360, H = 600;       // game area size: phones 360x600 (portrait), desktop 880x540 (landscape)
   var LAND = false;
   function wantLand() { return window.innerWidth >= 1000 && window.innerWidth / window.innerHeight >= 1.15; }
+
+  /* ----- campaign clock (India time): game k opens at midnight (IST) of 11+k October 2026 ----- */
+  var IST_MS = 5.5 * 3600 * 1000;
+  function opensAt(id) { return Date.UTC(2026, 9, 11 + id) - IST_MS; }
+  function campaignEndsAt() { return Date.UTC(2026, 9, 21) - IST_MS; }
+  function nextOpening() {
+    var now = Date.now();
+    for (var k = 1; k <= 9; k++) if (opensAt(k) > now) return { id: k, at: opensAt(k) };
+    return null;
+  }
+  function fmtLeft(ms) {
+    var s = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+    function p(n) { return (n < 10 ? "0" : "") + n; }
+    return d > 0 ? d + "d " + p(h) + "h " + p(m) + "m" : p(h) + ":" + p(m) + ":" + p(x);
+  }
+  // "Next game opens in …" — shown after someone plays and on the desktop info column
+  function nextTimerHtml() {
+    var n = nextOpening();
+    if (!n) {
+      return '<div class="next-timer">' + (Date.now() < campaignEndsAt() ? "🎉 That was the last game — thank you for playing!" : "The Carnival has ended — thank you for playing!") + "</div>";
+    }
+    return '<div class="next-timer">⏳ Next game · <b>' + esc(META[n.id].title) + '</b> opens in <b class="nt-clock" data-at="' + n.at + '">--:--:--</b></div>';
+  }
+  function tickClocks() {
+    var list = document.querySelectorAll(".nt-clock");
+    for (var i = 0; i < list.length; i++) list[i].textContent = fmtLeft(+list[i].getAttribute("data-at") - Date.now());
+  }
   var Games = (window.CarnivalGames = {});
 
   var META = [
@@ -359,8 +386,9 @@
         '<div class="ov-title">' + esc(o.title || "You won!") + '</div>' +
         '<div class="ov-msg">' + esc(o.msg || "") + '</div>' +
         '<div class="ov-prize">' + esc(PLAY.prize.label) + '</div><br>' +
-        '<button class="btn3d" id="claimBtn">CLAIM MY PRIZE →</button>';
+        '<button class="btn3d" id="claimBtn">CLAIM MY PRIZE →</button>' + nextTimerHtml();
       card.querySelector("#claimBtn").onclick = function () { claimForm(card); };
+      tickClocks();
     } else {
       var again = PLAY && PLAY.testMode;
       card.innerHTML =
@@ -368,9 +396,10 @@
         '<div class="ov-title">' + esc(o.title || "Not this time") + '</div>' +
         '<div class="ov-msg">' + esc(o.msg || "Better luck next time!") + '</div>' +
         (again ? '<button class="btn3d" id="againBtn">TRY AGAIN (TEST)</button>'
-               : '<div class="fine" style="margin:0 0 12px">Every order gives you a new play.</div><button class="btn3d gold" id="shopBtn">SHOP NOW →</button>');
+               : '<div class="fine" style="margin:0 0 12px">Every order gives you a new play.</div><button class="btn3d gold" id="shopBtn">SHOP NOW →</button>' + nextTimerHtml());
       if (again) card.querySelector("#againBtn").onclick = function () { ov.remove(); launch(curId); };
       else card.querySelector("#shopBtn").onclick = function () { window.location.href = shopUrl(); };
+      tickClocks();
     }
   }
 
@@ -435,7 +464,7 @@
         '<div class="ov-icon">🎁</div><div class="ov-title">Added to your order!</div>' +
         '<div class="ov-msg"><b>' + esc(label) + '</b> has been added to your order at no cost. ' + esc(d.note || "") + '</div>' +
         '<button class="btn3d gold" id="cShop">KEEP SHOPPING →</button>' +
-        '<div class="fine">Nothing else to do — we will pack it with your order.</div>';
+        '<div class="fine">Nothing else to do — we will pack it with your order.</div>' + nextTimerHtml();
     } else {
       var isProduct = d.delivery === "product_code";
       card.innerHTML =
@@ -444,9 +473,10 @@
         (isProduct ? " " + esc(d.note || "") : (d.unique ? " Single-use, valid for " + (d.days || 7) + " days." : "")) + '</div>' +
         codeBox(d.code) +
         '<button class="btn3d gold" id="cShop">SHOP NOW →</button>' +
-        '<div class="fine">Paste the code at checkout. Copy it now — you will need it.</div>';
+        '<div class="fine">Paste the code at checkout. Copy it now — you will need it.</div>' + nextTimerHtml();
       card.querySelector("#cCopy").onclick = function () { copyText(d.code, this); };
     }
+    tickClocks();
     card.querySelector("#cShop").onclick = function () {
       window.location.href = d.code ? "/discount/" + encodeURIComponent(d.code) + "?redirect=" + shopUrl() : shopUrl();
     };
@@ -463,7 +493,9 @@
       (d.canClaim ? '<button class="btn3d gold" id="bClaim">CLAIM MY PRIZE →</button>' :
         (d.reason === "not_live" && CFG.activeGame ? '<button class="btn3d gold" id="bToday">PLAY TODAY\'S GAME</button>' :
          '<button class="btn3d gold" id="bShop">SHOP NOW →</button>')) +
+      (d.reason === "already_played" || d.reason === "already_claimed" ? nextTimerHtml() : "") +
       '</div>';
+    tickClocks();
     var box = els.stage.querySelector.bind(els.stage);
     if (d.canClaim) {
       box("#bClaim").onclick = function () {
@@ -483,8 +515,8 @@
   /* ---------------- locked screen ---------------- */
   function renderLocked(id) {
     var m = META[id];
-    var target = new Date(2026, 9, m.day, 0, 0, 0);
-    var ended = new Date() > new Date(2026, 9, 21, 0, 0, 0);
+    var target = new Date(opensAt(id));
+    var ended = Date.now() > campaignEndsAt();
     els.stage.innerHTML =
       '<div class="locked"><div class="big">🔒</div><h3>' + esc(m.title) + '</h3>' +
       '<p>' + (ended ? 'The Carnival has ended. Thank you for playing!' : 'Unlocks on ' + m.day + ' Oct') + '</p>' +
@@ -615,8 +647,10 @@
       '<h3>What you can win</h3><ul class="wins">' + win + '</ul>' +
       (feat ? '<div class="feat"><img src="' + esc(feat.image) + '" alt=""><div><b>' + esc(feat.label.replace(/^FREE\s*/i, "")) + '</b><small>Free gift</small>' +
         (feat.url ? '<a href="' + esc(feat.url) + '" target="_blank" rel="noopener">Meet the product ↗</a>' : "") + '</div></div>' : "") +
+      '<div class="side-next">' + nextTimerHtml() + '</div>' +
       '<ul class="rules"><li>One order = one play.</li><li>Coupons are single-use and valid for ' + days + ' days.</li><li>Free gifts are added to your order automatically.</li></ul>' +
       '</div>';
+    tickClocks();
   }
 
   function launch(id) {
@@ -802,6 +836,7 @@
       build();
       fit();
       window.addEventListener("resize", onResize);
+      setInterval(tickClocks, 1000);
       window.addEventListener("orientationchange", function () { setTimeout(onResize, 200); });
       var first = CFG.initialGame || CFG.activeGame || 1;
       if (isLocked(first) && CFG.activeGame) first = CFG.activeGame;

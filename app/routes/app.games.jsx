@@ -32,7 +32,7 @@ export const loader = async ({ request }) => {
       })),
     };
   }
-  return json({ games, couponDays: settings.couponDays ?? 7, requireOrder: settings.requireOrder !== false, freeGiftDailyLimit: settings.freeGiftDailyLimit ?? 6 });
+  return json({ games, couponDays: settings.couponDays ?? 7, requireOrder: settings.requireOrder !== false, freeGiftDailyLimit: settings.freeGiftDailyLimit ?? 6, spreadFreeGifts: settings.spreadFreeGifts !== false });
 };
 
 const int = (v, min, max, fallback) => {
@@ -52,8 +52,8 @@ export const action = async ({ request }) => {
   const ops = [];
   ops.push(prisma.gameSettings.upsert({
     where: { shop },
-    update: { couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6) },
-    create: { shop, couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6), testMode: true },
+    update: { couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6), spreadFreeGifts: !!data.spreadFreeGifts },
+    create: { shop, couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6), spreadFreeGifts: !!data.spreadFreeGifts, testMode: true },
   }));
 
   for (let id = 1; id <= 9; id++) {
@@ -107,6 +107,7 @@ export default function GamesAndPrizes() {
   const [couponDays, setCouponDays] = useState(String(data.couponDays));
   const [requireOrder, setRequireOrder] = useState(data.requireOrder);
   const [freeLimit, setFreeLimit] = useState(String(data.freeGiftDailyLimit));
+  const [spreadFree, setSpreadFree] = useState(data.spreadFreeGifts);
 
   const setGame = useCallback((id, patch) => setGames((g) => ({ ...g, [id]: { ...g[id], ...patch } })), []);
   const setPrize = useCallback((id, k, patch) => setGames((g) => ({
@@ -141,7 +142,7 @@ export default function GamesAndPrizes() {
   });
 
   const save = () => {
-    const payload = { couponDays, requireOrder, freeGiftDailyLimit: freeLimit, games: {} };
+    const payload = { couponDays, requireOrder, freeGiftDailyLimit: freeLimit, spreadFreeGifts: spreadFree, games: {} };
     for (const id of Object.keys(games)) payload.games[id] = { ...games[id], prizes: games[id].prizes.map(({ _k, ...p }) => p) };
     const fd = new FormData();
     fd.append("payload", JSON.stringify(payload));
@@ -180,6 +181,11 @@ export default function GamesAndPrizes() {
                       helpText="Once this many free products are given today, games only give coupons until tomorrow." />
                   </div>
                 </InlineStack>
+                <Checkbox
+                  label="Spread the free gifts through the day"
+                  helpText="On: the day's free gifts are released gradually (for 6 gifts, one every 4 hours), so they do not all go in the first hour. Customers are never told how many there are."
+                  checked={spreadFree} onChange={setSpreadFree}
+                />
                 <BlockStack gap="100">
                   <Button onClick={applyMix}>Apply the standard coupon mix to all games</Button>
                   <Text as="p" variant="bodySm" tone="subdued">
