@@ -125,7 +125,7 @@ async function handlePlay(ctx, fd) {
 
   // Roll and reserve in one step per game, so the daily prize limit holds even when many people play at once.
   let o = null, duplicate = false;
-  await withLock(`${shop}:${gameId}`, async () => {
+  await withLock(shop, async () => {
     o = await rollOutcome(shop, gameId);
     try {
       await prisma.gamePlay.create({

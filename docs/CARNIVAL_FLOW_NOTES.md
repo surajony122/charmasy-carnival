@@ -54,6 +54,12 @@ _Last updated: 2026-10-05. Campaign: 12–20 Oct 2026, one game per day._
 - Prize-limit checks are serialized in-process (`withLock`), so keep the web service on ONE instance.
 - Home page of the app shows a green/red "Data storage" banner (green confirmed on the live app, 2026-10-05).
 
+## Prize rules (2026-10-08)
+- Standard coupon mix (default for every game, set with the "Apply the standard coupon mix" button on Games & prizes):
+  5% OFF 90% / 10% OFF 10%, and Rs 50 OFF 90% / Rs 100 OFF 10%; percent and rupee coupons equally likely.
+- Free gifts: max **6 per day across ALL games together** (setting "Free gifts per day"); after that games only give coupons.
+- Per-game "max prizes per day" (default 6) still applies to all prize types of that game - raise it if coupons should be unlimited.
+
 ## Desktop layout (2026-10-08)
 - Phones: tall 360x600 game area, tips under the game (unchanged). Desktop (width >= 1000 and wider than tall): wide
   880x540 game area on the left + information column on the right (about, how to play, prizes, featured free product with

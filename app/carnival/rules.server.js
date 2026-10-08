@@ -4,18 +4,11 @@ import prisma from "../db.server";
 import { GAME_NAMES, SKILL_GAMES, DEFAULT_CHANCE } from "./constants";
 export { GAME_NAMES, SKILL_GAMES };
 
-const pct = (value, share) => ({ kind: "PERCENT", value, share, dailyLimit: null, active: true });
-const DEFAULT_PRIZES = {
-  1: [pct(5, 5), pct(10, 3)],
-  2: [pct(5, 4), pct(10, 2)],
-  3: [pct(5, 1)],
-  4: [pct(5, 3), pct(10, 2)],
-  5: [pct(5, 1)],
-  6: [pct(5, 3), pct(10, 2)],
-  7: [pct(5, 3), pct(10, 2)],
-  8: [pct(5, 7), pct(10, 3)],
-  9: [pct(5, 3), pct(10, 2)],
-};
+// Standard coupon mix (agreed with the owner): within percent coupons 90% are 5% and 10% are 10%;
+// within rupee coupons 90% are Rs 50 and 10% are Rs 100. Weights below make percent and rupee coupons equally likely.
+const coupon = (kind, value, share) => ({ kind, value, share, dailyLimit: null, active: true });
+export const STANDARD_MIX = [coupon("PERCENT", 5, 45), coupon("PERCENT", 10, 5), coupon("AMOUNT", 50, 45), coupon("AMOUNT", 100, 5)];
+const DEFAULT_PRIZES = { 1: STANDARD_MIX, 2: STANDARD_MIX, 3: STANDARD_MIX, 4: STANDARD_MIX, 5: STANDARD_MIX, 6: STANDARD_MIX, 7: STANDARD_MIX, 8: STANDARD_MIX, 9: STANDARD_MIX };
 
 export function defaultGameConfig(gameId) {
   return { enabled: true, winChance: DEFAULT_CHANCE[gameId] ?? 50, dailyLimit: 6 };
@@ -62,7 +55,7 @@ export async function getSettings(shop) {
   } catch (e) {
     console.error("Failed to read settings:", e);
   }
-  return st || { testMode: false, manualActive: false, activeGameId: 1, couponDays: 7, requireOrder: true };
+  return st || { testMode: false, manualActive: false, activeGameId: 1, couponDays: 7, requireOrder: true, freeGiftDailyLimit: 6 };
 }
 
 export async function loadGame(shop, gameId) {
@@ -81,7 +74,7 @@ export async function loadGame(shop, gameId) {
 function usedWhere(shop, gameId, dayStart, extra = {}) {
   const cutoff = new Date(Date.now() - 30 * 60 * 1000);
   return {
-    shop, gameId, outcomeWin: true, rolledAt: { gte: dayStart }, ...extra,
+    shop, ...(gameId ? { gameId } : {}), outcomeWin: true, rolledAt: { gte: dayStart }, ...extra,
     OR: [
       { claimedAt: { not: null } },
       { AND: [{ claimedAt: null }, { rolledAt: { gte: cutoff } }, { OR: [{ finishedAt: null }, { won: true }] }] },
@@ -95,9 +88,15 @@ export async function openPrizes(shop, gameId) {
   const dayStart = istDayStart();
   const usedTotal = await prisma.gamePlay.count({ where: usedWhere(shop, gameId, dayStart) });
   const roomTotal = cfg.dailyLimit - usedTotal;
+  // Free gifts have one daily limit shared by ALL games together.
+  const settings = await getSettings(shop);
+  const freeLimit = settings.freeGiftDailyLimit ?? 6;
+  const freeUsed = await prisma.gamePlay.count({ where: usedWhere(shop, null, dayStart, { prizeKind: "FREE_PRODUCT" }) });
+  const freeLeft = freeLimit - freeUsed;
   const open = [];
   for (const p of prizes) {
     if (!isDeliverable(p)) continue;
+    if (p.kind === "FREE_PRODUCT" && freeLeft <= 0) continue;
     if (p.dailyLimit != null && !p.isDefault) {
       const used = await prisma.gamePlay.count({ where: usedWhere(shop, gameId, dayStart, { prizeId: p.id }) });
       if (used >= p.dailyLimit) continue;

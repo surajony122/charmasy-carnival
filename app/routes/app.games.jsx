@@ -32,7 +32,7 @@ export const loader = async ({ request }) => {
       })),
     };
   }
-  return json({ games, couponDays: settings.couponDays ?? 7, requireOrder: settings.requireOrder !== false });
+  return json({ games, couponDays: settings.couponDays ?? 7, requireOrder: settings.requireOrder !== false, freeGiftDailyLimit: settings.freeGiftDailyLimit ?? 6 });
 };
 
 const int = (v, min, max, fallback) => {
@@ -52,8 +52,8 @@ export const action = async ({ request }) => {
   const ops = [];
   ops.push(prisma.gameSettings.upsert({
     where: { shop },
-    update: { couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder },
-    create: { shop, couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, testMode: true },
+    update: { couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6) },
+    create: { shop, couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6), testMode: true },
   }));
 
   for (let id = 1; id <= 9; id++) {
@@ -106,6 +106,7 @@ export default function GamesAndPrizes() {
   const [games, setGames] = useState(() => withKeys(data.games));
   const [couponDays, setCouponDays] = useState(String(data.couponDays));
   const [requireOrder, setRequireOrder] = useState(data.requireOrder);
+  const [freeLimit, setFreeLimit] = useState(String(data.freeGiftDailyLimit));
 
   const setGame = useCallback((id, patch) => setGames((g) => ({ ...g, [id]: { ...g[id], ...patch } })), []);
   const setPrize = useCallback((id, k, patch) => setGames((g) => ({
@@ -127,8 +128,20 @@ export default function GamesAndPrizes() {
     });
   };
 
+  // 5% / 10% and Rs50 / Rs100 coupons, 90:10 inside each pair; free-product prizes are left as they are.
+  const applyMix = () => setGames((g) => {
+    const out = {};
+    for (const id of Object.keys(g)) {
+      const keep = g[id].prizes.filter((p) => p.kind === "FREE_PRODUCT");
+      const blank = { productId: "", variantId: "", productTitle: "", productHandle: "", imageUrl: "", dailyLimit: "" };
+      const mix = [["PERCENT", 5, 45], ["PERCENT", 10, 5], ["AMOUNT", 50, 45], ["AMOUNT", 100, 5]].map(([kind, value, share]) => ({ _k: ++keySeq, kind, value, share, ...blank }));
+      out[id] = { ...g[id], prizes: [...mix, ...keep] };
+    }
+    return out;
+  });
+
   const save = () => {
-    const payload = { couponDays, requireOrder, games: {} };
+    const payload = { couponDays, requireOrder, freeGiftDailyLimit: freeLimit, games: {} };
     for (const id of Object.keys(games)) payload.games[id] = { ...games[id], prizes: games[id].prizes.map(({ _k, ...p }) => p) };
     const fd = new FormData();
     fd.append("payload", JSON.stringify(payload));
@@ -158,9 +171,21 @@ export default function GamesAndPrizes() {
                   helpText="On: customers play from their thank-you / order page and each order gives exactly one play. Off: anyone can play (not recommended)."
                   checked={requireOrder} onChange={setRequireOrder}
                 />
-                <div style={{ maxWidth: 260 }}>
-                  <TextField label="Coupon valid for (days)" type="number" min={1} value={couponDays} onChange={setCouponDays} autoComplete="off" />
-                </div>
+                <InlineStack gap="400" wrap>
+                  <div style={{ width: 260 }}>
+                    <TextField label="Coupon valid for (days)" type="number" min={1} value={couponDays} onChange={setCouponDays} autoComplete="off" />
+                  </div>
+                  <div style={{ width: 300 }}>
+                    <TextField label="Free gifts per day (all games together)" type="number" min={0} value={freeLimit} onChange={setFreeLimit} autoComplete="off"
+                      helpText="Once this many free products are given today, games only give coupons until tomorrow." />
+                  </div>
+                </InlineStack>
+                <BlockStack gap="100">
+                  <Button onClick={applyMix}>Apply the standard coupon mix to all games</Button>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Sets every game's coupons to: 5% OFF (90%) / 10% OFF (10%) and ₹50 OFF (90%) / ₹100 OFF (10%), with percent and rupee coupons equally likely. Your free-product prizes are kept. Press "Save all changes" afterwards.
+                  </Text>
+                </BlockStack>
               </BlockStack>
             </Card>
 
