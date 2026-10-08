@@ -21,7 +21,6 @@ const CSS = (() => {
   return "";
 })();
 
-const DEFAULT_SHOP = "ravistore-shop.myshopify.com";
 const LEGACY_CODES = { 5: "CARNIVAL5", 10: "CARNIVAL10", 50: "CARNIVAL50", 100: "CARNIVAL100", GIFT: "FREESTELLAR" };
 
 const clean = (v, max) => String(v || "").replace(/[^A-Za-z0-9_~-]/g, "").slice(0, max);
@@ -55,7 +54,7 @@ function limited(request, intent, orderId) {
 }
 
 async function context(request) {
-  let shop = DEFAULT_SHOP, admin = null;
+  let shop = null, admin = null;   // stays null unless Shopify's signature on the request checks out
   try {
     const r = await authenticate.public.appProxy(request);
     if (r.session) shop = r.session.shop;
@@ -65,6 +64,7 @@ async function context(request) {
   return { shop, admin, settings, adminTest: settings.testMode === true };
 }
 
+const UNVERIFIED = "We couldn't verify this request. Please open the game from the store.";
 const fail = (reason, message, extra = {}) => ({ ok: false, success: false, reason, message, error: message, ...extra });
 const publicPrize = (p) => (p ? { label: p.label, kind: p.kind, short: p.short, image: p.image || null, url: p.url || null } : null);
 
@@ -156,7 +156,7 @@ function shortOf(row) {
 async function handleResult(ctx, fd) {
   const orderId = clean(fd.get("orderId"), 80);
   const row = await prisma.gamePlay.findUnique({ where: { orderId } });
-  if (!row) return fail("no_play", "Unknown play.");
+  if (!row || row.shop !== ctx.shop) return fail("no_play", "Unknown play.");
   if (!row.finishedAt) {
     await prisma.gamePlay.update({
       where: { orderId },
@@ -181,6 +181,7 @@ async function handleClaim(ctx, fd) {
   const phone = normalizePhone(fd.get("phone"));
 
   let row = await prisma.gamePlay.findUnique({ where: { orderId: playRef } });
+  if (row && row.shop !== shop) row = null;
   if (!row || !row.outcomeWin || !row.won) return fail("not_won", "We couldn't verify this win. Please play again.");
   if (row.claimedAt && row.delivery && row.delivery !== "pending") return claimView(row);
 
@@ -268,6 +269,7 @@ export const action = async ({ request }) => {
       return json(fail("rate", "Too many attempts. Please wait a minute and try again."));
     }
     const ctx = await context(request);
+    if (!ctx.shop && (intent === "play" || intent === "result" || intent === "claim")) return json(fail("unverified", UNVERIFIED));
     if (intent === "play") return json(await handlePlay(ctx, fd));
     if (intent === "result") return json(await handleResult(ctx, fd));
     if (intent === "claim") return json(await handleClaim(ctx, fd));

@@ -63,7 +63,7 @@ model GameSettings {
   shop         String  @unique
   activeGameId Int     @default(1) // used only when manualActive is true
   manualActive Boolean @default(false) // false = the live game follows the calendar (12-20 Oct)
-  testMode     Boolean @default(true) // If true, all 9 games are unlocked and rules are relaxed for testing
+  testMode     Boolean @default(false) // If true, all 9 games are unlocked and rules are relaxed for testing
   couponDays   Int     @default(7)   // how long a won coupon stays valid
   requireOrder Boolean @default(true) // a play needs a real order
   freeGiftDailyLimit Int @default(6)  // free products handed out per day, all games together

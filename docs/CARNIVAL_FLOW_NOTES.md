@@ -75,6 +75,13 @@ _Last updated: 2026-10-05. Campaign: 12–20 Oct 2026, one game per day._
   link, rules) and all 9 game names in the tab row. Every game has a landscape variant (`C.land` in `public/carnival/games`).
 - The free product's page link needs `productHandle` (saved by the admin product picker on Games & prizes).
 
+## Installing on a second (live) store (2026-10-08)
+- Settings, prizes and plays are stored per store (`shop`); a new store starts in normal customer mode (Test Mode OFF).
+- Requests Shopify has not signed (for example calls straight to the Render URL) are refused for play / result / claim.
+- Needs: install via custom distribution link, approve scopes, (if Shopify asks) protected customer data access,
+  place the extension blocks in that store's checkout + customer-accounts editors, configure Games & prizes there.
+- Before launch: Test Mode OFF and the live game selector on "Automatic".
+
 ## Still open
 - Emailing the code (not built; code is shown on screen and saved on the customer profile).
 - Real store install is deferred (see project memory).

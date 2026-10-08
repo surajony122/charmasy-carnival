@@ -28,7 +28,7 @@ export const action = async ({ request }) => {
 
   if (actionType === "toggleTestMode") {
     const current = await prisma.gameSettings.findUnique({ where: { shop } });
-    const currentMode = current ? current.testMode : true;
+    const currentMode = current ? current.testMode : false;
     const newMode = !currentMode;
     await prisma.gameSettings.upsert({
       where: { shop },
@@ -45,7 +45,7 @@ export const action = async ({ request }) => {
     await prisma.gameSettings.upsert({
       where: { shop },
       update: { activeGameId: gameId, manualActive: !auto },
-      create: { shop, activeGameId: gameId, manualActive: !auto, testMode: true },
+      create: { shop, activeGameId: gameId, manualActive: !auto, testMode: false },
     });
     return json({ success: true });
   }
@@ -68,7 +68,7 @@ export const loader = async ({ request }) => {
     }),
   ]);
 
-  const settings = settingsRecord || { testMode: true, activeGameId: 1, manualActive: false };
+  const settings = settingsRecord || { testMode: false, activeGameId: 1, manualActive: false };
 
   return json({ plays, settings, storage: storageStatus() });
 };

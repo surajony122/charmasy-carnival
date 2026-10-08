@@ -51,7 +51,7 @@ export function activeGameFor(settings, now = Date.now()) {
 export async function getSettings(shop) {
   let st = null;
   try {
-    st = (await prisma.gameSettings.findUnique({ where: { shop } })) || (await prisma.gameSettings.findFirst());
+    if (shop) st = await prisma.gameSettings.findUnique({ where: { shop } });   // each store has its own settings
   } catch (e) {
     console.error("Failed to read settings:", e);
   }

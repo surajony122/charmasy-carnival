@@ -53,7 +53,7 @@ export const action = async ({ request }) => {
   ops.push(prisma.gameSettings.upsert({
     where: { shop },
     update: { couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6), spreadFreeGifts: !!data.spreadFreeGifts },
-    create: { shop, couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6), spreadFreeGifts: !!data.spreadFreeGifts, testMode: true },
+    create: { shop, couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6), spreadFreeGifts: !!data.spreadFreeGifts, testMode: false },
   }));
 
   for (let id = 1; id <= 9; id++) {
