@@ -139,6 +139,7 @@ export default function Index() {
         <IndexTable.Cell>
           {play.delivery === "order_edit" ? "Added to order" : play.couponCode || (play.won ? "Not claimed" : "-")}
           {play.deliveryNote ? <Text as="p" variant="bodySm" tone="subdued">{play.deliveryNote}</Text> : null}
+          {play.deliveryError ? <Text as="p" variant="bodySm" tone="critical">⚠ {play.deliveryError}</Text> : null}
         </IndexTable.Cell>
         <IndexTable.Cell>{new Date(play.playedAt).toLocaleString()}</IndexTable.Cell>
       </IndexTable.Row>

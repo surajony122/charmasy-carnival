@@ -92,6 +92,7 @@ async function handlePlay(ctx, fd) {
   if (adminTest) {
     playRef = `${baseOrder || "TEST"}~t${attempt}~${Date.now().toString(36)}`;
     if (admin && /^\d{5,}$/.test(baseOrder)) order = await resolveOrder(admin, baseOrder);   // a real order in the link (test)
+    if (order && order.cancelled) return fail("invalid_order", `TEST: order ${order.name} is cancelled. Open the game from the thank-you page of your NEW order.`);
   } else if (settings.requireOrder) {
     if (!baseOrder || /^(PLAY_|ORDER_|TEST)/.test(baseOrder)) return fail("need_order", "Place an order to unlock your play!");
     if (!admin) return fail("unavailable", "We couldn't verify your order right now. Please try again in a moment.");
@@ -219,13 +220,15 @@ async function handleClaim(ctx, fd) {
 
   const customerGid = await upsertCustomer(admin, email, phone);
   const days = settings.couponDays || 7;
-  let delivery = null, code = null, note = "", unique = false;
+  let delivery = null, code = null, note = "", unique = false, editError = "";
 
   if (prize.kind === "FREE_PRODUCT") {
-    if (order?.gid) {
+    if (!order?.gid) editError = "No Shopify order is linked to this play (the link had no real order number).";
+    else if (order.cancelled) editError = `Order ${order.name} is cancelled, so nothing can be added to it.`;
+    else {
       const r = await addFreeProductToOrder(admin, order.gid, prize.variantId);
       if (r.ok) { delivery = "order_edit"; note = `Added to order ${order.name}`; }
-      else console.error("Order edit failed, falling back to a product code:", r.error);
+      else { editError = `Shopify refused to add it to order ${order.name}: ${r.error}`; console.error("Order edit failed, falling back to a product code:", r.error); }
     }
     if (!delivery) {
       code = makeCode();
@@ -252,7 +255,7 @@ async function handleClaim(ctx, fd) {
 
   await prisma.gamePlay.update({
     where: { orderId: playRef },
-    data: { email, phone, couponCode: code, delivery, deliveryNote: note, customerId: customerGid ? customerGid.split("/").pop() : row.customerId },
+    data: { email, phone, couponCode: code, delivery, deliveryNote: note, deliveryError: editError || null, customerId: customerGid ? customerGid.split("/").pop() : row.customerId },
   });
   await saveWinToCustomer(admin, customerGid, { game: row.gameId, prize: row.prizeLabel, code, delivery, order: order?.name || playRef, wonAt: new Date().toISOString() });
 
