@@ -74,6 +74,7 @@ async function handlePlay(ctx, fd) {
   const baseOrder = clean(fd.get("orderId"), 40);
   const gameId = parseInt(fd.get("gameId") || "0", 10);
   const attempt = parseInt(fd.get("attempt") || "1", 10) || 1;
+  const forceFree = adminTest && fd.get("testPrize") === "free";   // Test Mode only: always win the free product
   const customerId = String(fd.get("customerId") || "").replace(/\D/g, "").slice(0, 24);
   if (!(gameId >= 1 && gameId <= 9)) return fail("bad_game", "Unknown game.");
 
@@ -126,7 +127,7 @@ async function handlePlay(ctx, fd) {
   // Roll and reserve in one step per game, so the daily prize limit holds even when many people play at once.
   let o = null, duplicate = false;
   await withLock(shop, async () => {
-    o = await rollOutcome(shop, gameId);
+    o = await rollOutcome(shop, gameId, { forceKind: forceFree ? "FREE_PRODUCT" : null });
     try {
       await prisma.gamePlay.create({
         data: {
@@ -140,6 +141,7 @@ async function handlePlay(ctx, fd) {
     }
   });
   if (duplicate) return fail("already_played", "You've already used the play for this order.");
+  if (o.noForcedPrize) return fail("no_free_product", "TEST: no free product is set up for this game. Choose one on Games & prizes and press Save.");
   return {
     ok: true, success: true, playRef, resumed: false, win: o.win, soldOut: !!o.soldOut, testMode: adminTest, days: settings.couponDays || 7,
     prize: publicPrize(o.prize), prizes: o.prizes, orderName: order?.name || "", hint: order ? maskEmail(order.email) : "",
@@ -187,7 +189,11 @@ async function handleClaim(ctx, fd) {
 
   // The email must be the one on the order (keeps other people from claiming with someone else's order id).
   let order = null;
-  if (!adminTest && settings.requireOrder) {
+  if (adminTest) {
+    // Test Mode: if the link carried a real order number, use that order (so the free product is added to it for real)
+    const baseRef = playRef.split("~")[0];
+    if (/^\d{5,}$/.test(baseRef)) order = await resolveOrder(admin, baseRef);
+  } else if (settings.requireOrder) {
     order = await resolveOrder(admin, playRef);
     if (!order) return fail("unavailable", "We couldn't verify your order right now. Please try again in a moment.");
     if (order.email && order.email !== email) {
@@ -296,7 +302,7 @@ export const loader = async ({ request }) => {
     version,
     bundled: BUNDLED,
     css: CSS,
-    cfg: { orderId, customerId, orderBadge, initialGame, isTest, activeGame },
+    cfg: { orderId, customerId, orderBadge, initialGame, isTest, activeGame, testPrize: ctx.adminTest && url.searchParams.get("testprize") === "free" ? "free" : "" },
   });
   return new Response(html, { headers: { "Content-Type": "application/liquid" } });
 };

@@ -83,7 +83,7 @@ function usedWhere(shop, gameId, dayStart, extra = {}) {
 }
 
 // Prizes that can be handed out right now for a game (stock left today, deliverable, active).
-export async function openPrizes(shop, gameId) {
+export async function openPrizes(shop, gameId, { ignoreFreeLimit = false } = {}) {
   const { cfg, prizes } = await loadGame(shop, gameId);
   const dayStart = istDayStart();
   const usedTotal = await prisma.gamePlay.count({ where: usedWhere(shop, gameId, dayStart) });
@@ -101,7 +101,7 @@ export async function openPrizes(shop, gameId) {
   const open = [];
   for (const p of prizes) {
     if (!isDeliverable(p)) continue;
-    if (p.kind === "FREE_PRODUCT" && freeLeft <= 0) continue;
+    if (p.kind === "FREE_PRODUCT" && freeLeft <= 0 && !ignoreFreeLimit) continue;
     if (p.dailyLimit != null && !p.isDefault) {
       const used = await prisma.gamePlay.count({ where: usedWhere(shop, gameId, dayStart, { prizeId: p.id }) });
       if (used >= p.dailyLimit) continue;
@@ -112,11 +112,17 @@ export async function openPrizes(shop, gameId) {
   return { cfg, open, roomTotal, shown };
 }
 
-export async function rollOutcome(shop, gameId, { forceWin = false } = {}) {
-  const { cfg, open, roomTotal, shown } = await openPrizes(shop, gameId);
-  if (roomTotal <= 0 || !open.length) return { win: false, prize: null, soldOut: true, prizes: shown };
+// forceKind is for the admin's Test Mode only: it makes the play win a prize of that kind (for example a free product).
+export async function rollOutcome(shop, gameId, { forceWin = false, forceKind = null } = {}) {
+  const base = await openPrizes(shop, gameId, { ignoreFreeLimit: !!forceKind });
+  const { cfg, roomTotal, shown } = base;
+  let open = base.open;
+  if (forceKind) {
+    open = open.filter((p) => p.kind === forceKind);
+    if (!open.length) return { win: false, prize: null, soldOut: false, prizes: shown, noForcedPrize: true };
+  } else if (roomTotal <= 0 || !open.length) return { win: false, prize: null, soldOut: true, prizes: shown };
 
-  const wins = forceWin || Math.random() * 100 < cfg.winChance;
+  const wins = !!forceKind || forceWin || Math.random() * 100 < cfg.winChance;
   if (!wins) return { win: false, prize: null, soldOut: false, prizes: shown };
 
   const totalShare = open.reduce((a, p) => a + Math.max(1, p.share || 1), 0);

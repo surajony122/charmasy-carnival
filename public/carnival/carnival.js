@@ -660,10 +660,10 @@
     PLAY = null;
     els.stage.className = "stage g" + id + (LAND ? " land" : "");
     renderLoading();
+    var playFields = { intent: "play", orderId: CFG.orderId, gameId: id, attempt: attempt, customerId: CFG.customerId || "", testPrize: CFG.testPrize || "" };
     var early = CFG.earlyPlay && CFG.earlyPlay.id === id && attempt === 1 ? CFG.earlyPlay.p : null;
     if (CFG.earlyPlay) CFG.earlyPlay = null;      // only ever used for the very first launch
-    (early ? early.catch(function () { return post({ intent: "play", orderId: CFG.orderId, gameId: id, attempt: attempt, customerId: CFG.customerId || "" }); })
-           : post({ intent: "play", orderId: CFG.orderId, gameId: id, attempt: attempt, customerId: CFG.customerId || "" }))
+    (early ? early.catch(function () { return post(playFields); }) : post(playFields))
       .then(function (d) {
         if (token !== launchToken) return;
         if (!d || !d.ok) { renderBlocked(d || {}, id); return; }

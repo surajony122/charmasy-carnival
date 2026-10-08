@@ -64,6 +64,11 @@ _Last updated: 2026-10-05. Campaign: 12–20 Oct 2026, one game per day._
   already-played screens and the desktop info column.
 - Per-game "max prizes per day" (default 6) still applies to all prize types of that game - raise it if coupons should be unlimited.
 
+## Testing the free product on a real order (Test Mode only)
+- Turn Test Mode ON in the app, choose a free product on Games & prizes (Save), then open
+  `https://<store>/apps/carnival-games?order_id=<numeric order id>&testprize=free`.
+  The play always wins the free product; claiming adds it to that real, un-fulfilled order (100% off).
+
 ## Desktop layout (2026-10-08)
 - Phones: tall 360x600 game area, tips under the game (unchanged). Desktop (width >= 1000 and wider than tall): wide
   880x540 game area on the left + information column on the right (about, how to play, prizes, featured free product with

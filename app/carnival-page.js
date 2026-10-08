@@ -27,7 +27,7 @@ export function buildPage({ assets, version, cfg, bundled, css }) {
         if (!id || (!c.isTest && id !== c.activeGame)) return;
         var fd = new FormData();
         fd.append("intent", "play"); fd.append("orderId", c.orderId); fd.append("gameId", id);
-        fd.append("attempt", "1"); fd.append("customerId", c.customerId || "");
+        fd.append("attempt", "1"); fd.append("customerId", c.customerId || ""); fd.append("testPrize", c.testPrize || "");
         c.earlyPlay = { id: id, p: fetch(location.href, { method: "POST", body: fd }).then(function (r) { return r.json(); }) };
         c.earlyPlay.p.catch(function () {});
       } catch (e) {}
