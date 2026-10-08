@@ -82,6 +82,13 @@ _Last updated: 2026-10-05. Campaign: 12–20 Oct 2026, one game per day._
   place the extension blocks in that store's checkout + customer-accounts editors, configure Games & prizes there.
 - Before launch: Test Mode OFF and the live game selector on "Automatic".
 
+## Automatic claim (2026-10-09)
+- When a play belongs to a real Shopify order, the prize is claimed automatically after a win: email and phone are taken from
+  the order (order email/phone, customer, shipping/billing phone). No form is shown. The customer is created/tagged, the coupon
+  is locked to them, and a free product is added to that same order.
+- Only if the order has no email does the page show the small form (email required, phone optional).
+- Anything typed in the browser is ignored when the order has an email.
+
 ## Still open
 - Emailing the code (not built; code is shown on screen and saved on the customer profile).
 - Real store install is deferred (see project memory).

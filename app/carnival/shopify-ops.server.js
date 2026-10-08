@@ -34,25 +34,30 @@ export function normalizePhone(raw) {
   const digits = String(raw || "").replace(/\D/g, "");
   if (/^[6-9]\d{9}$/.test(digits)) return "+91" + digits;
   if (/^91[6-9]\d{9}$/.test(digits)) return "+" + digits;
+  if (/^\s*\+/.test(String(raw || "")) && digits.length >= 8 && digits.length <= 15) return "+" + digits;   // other countries
   return null;
 }
 
 // orderRef is what the thank-you button sends: the numeric order id (or, as a fallback, the order number).
 export async function resolveOrder(admin, orderRef) {
   if (!admin || !orderRef) return null;
-  const fields = "id name email createdAt cancelledAt displayFulfillmentStatus customer { id email }";
-  try {
-    if (/^\d{5,}$/.test(orderRef)) {
-      const d = await gql(admin, `#graphql\nquery o($id: ID!) { order(id: $id) { ${fields} } }`, { id: `gid://shopify/Order/${orderRef}` });
-      if (d?.data?.order) return shape(d.data.order);
+  const base = "id name email createdAt cancelledAt displayFulfillmentStatus customer { id email }";
+  // phone numbers are protected customer data: ask for them first, but never lose the order if that is refused
+  const rich = "id name email phone createdAt cancelledAt displayFulfillmentStatus customer { id email phone } shippingAddress { phone } billingAddress { phone }";
+  for (const fields of [rich, base]) {
+    try {
+      if (/^\d{5,}$/.test(orderRef)) {
+        const d = await gql(admin, `#graphql\nquery o($id: ID!) { order(id: $id) { ${fields} } }`, { id: `gid://shopify/Order/${orderRef}` });
+        if (d?.data?.order) return shape(d.data.order);
+      }
+      if (/^\d{1,8}$/.test(orderRef)) {
+        const d = await gql(admin, `#graphql\nquery o($q: String!) { orders(first: 1, query: $q) { nodes { ${fields} } } }`, { q: `name:#${orderRef}` });
+        const n = d?.data?.orders?.nodes?.[0];
+        if (n) return shape(n);
+      }
+    } catch (e) {
+      console.error("resolveOrder failed:", e);
     }
-    if (/^\d{1,8}$/.test(orderRef)) {
-      const d = await gql(admin, `#graphql\nquery o($q: String!) { orders(first: 1, query: $q) { nodes { ${fields} } } }`, { q: `name:#${orderRef}` });
-      const n = d?.data?.orders?.nodes?.[0];
-      if (n) return shape(n);
-    }
-  } catch (e) {
-    console.error("resolveOrder failed:", e);
   }
   return null;
 }
@@ -61,6 +66,7 @@ function shape(o) {
     gid: o.id, name: o.name, email: (o.email || o.customer?.email || "").toLowerCase(),
     customerGid: o.customer?.id || null, createdAt: o.createdAt, cancelled: !!o.cancelledAt,
     fulfillment: o.displayFulfillmentStatus,
+    phone: o.phone || o.customer?.phone || o.shippingAddress?.phone || o.billingAddress?.phone || "",
   };
 }
 

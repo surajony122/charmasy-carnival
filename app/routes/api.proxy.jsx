@@ -54,7 +54,8 @@ function limited(request, intent, orderId) {
 }
 
 async function context(request) {
-  let shop = null, admin = null;   // stays null unless Shopify's signature on the request checks out
+  // stays null unless Shopify's signature on the request checks out (CARNIVAL_DEV_SHOP is for local testing only; never set on Render)
+  let shop = process.env.CARNIVAL_DEV_SHOP || null, admin = null;
   try {
     const r = await authenticate.public.appProxy(request);
     if (r.session) shop = r.session.shop;
@@ -90,6 +91,7 @@ async function handlePlay(ctx, fd) {
   let playRef = baseOrder;
   if (adminTest) {
     playRef = `${baseOrder || "TEST"}~t${attempt}~${Date.now().toString(36)}`;
+    if (admin && /^\d{5,}$/.test(baseOrder)) order = await resolveOrder(admin, baseOrder);   // a real order in the link (test)
   } else if (settings.requireOrder) {
     if (!baseOrder || /^(PLAY_|ORDER_|TEST)/.test(baseOrder)) return fail("need_order", "Place an order to unlock your play!");
     if (!admin) return fail("unavailable", "We couldn't verify your order right now. Please try again in a moment.");
@@ -111,14 +113,14 @@ async function handlePlay(ctx, fd) {
     }
     if (row.finishedAt) {
       if (row.outcomeWin && row.won) {
-        return fail("already_played", "You won! Claim your prize below.", { canClaim: true, playRef, prizeLabel: row.prizeLabel, hint: order ? maskEmail(order.email) : "" });
+        return fail("already_played", "You won! Claim your prize below.", { canClaim: true, autoClaim: !!(order && order.email), playRef, prizeLabel: row.prizeLabel, hint: order ? maskEmail(order.email) : "" });
       }
       return fail("already_played", "You've already used the play for this order. Place another order for another play!");
     }
     // started but not finished (page was closed or refreshed): same outcome, no re-roll
     const { shown } = await openPrizes(shop, gameId);
     return {
-      ok: true, success: true, playRef, resumed: true, win: !!row.outcomeWin, soldOut: false, testMode: adminTest, days: settings.couponDays || 7,
+      ok: true, success: true, playRef, resumed: true, win: !!row.outcomeWin, soldOut: false, testMode: adminTest, days: settings.couponDays || 7, autoClaim: !!(order && order.email),
       prize: row.outcomeWin ? { label: row.prizeLabel, kind: row.prizeKind, short: shortOf(row) } : null,
       prizes: shown, orderName: order?.name || "", hint: order ? maskEmail(order.email) : "",
     };
@@ -143,7 +145,7 @@ async function handlePlay(ctx, fd) {
   if (duplicate) return fail("already_played", "You've already used the play for this order.");
   if (o.noForcedPrize) return fail("no_free_product", "TEST: no free product is set up for this game. Choose one on Games & prizes and press Save.");
   return {
-    ok: true, success: true, playRef, resumed: false, win: o.win, soldOut: !!o.soldOut, testMode: adminTest, days: settings.couponDays || 7,
+    ok: true, success: true, playRef, resumed: false, win: o.win, soldOut: !!o.soldOut, testMode: adminTest, days: settings.couponDays || 7, autoClaim: !!(order && order.email),
     prize: publicPrize(o.prize), prizes: o.prizes, orderName: order?.name || "", hint: order ? maskEmail(order.email) : "",
   };
 }
@@ -177,18 +179,12 @@ function claimView(row, extra = {}) {
 async function handleClaim(ctx, fd) {
   const { shop, admin, settings, adminTest } = ctx;
   const playRef = clean(fd.get("orderId"), 80);
-  const email = String(fd.get("email") || "").trim().toLowerCase();
-  const phone = normalizePhone(fd.get("phone"));
-
   let row = await prisma.gamePlay.findUnique({ where: { orderId: playRef } });
   if (row && row.shop !== shop) row = null;
   if (!row || !row.outcomeWin || !row.won) return fail("not_won", "We couldn't verify this win. Please play again.");
   if (row.claimedAt && row.delivery && row.delivery !== "pending") return claimView(row);
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail("bad_email", "Please enter a valid email address.");
-  if (!phone) return fail("bad_phone", "Please enter a valid 10-digit mobile number.");
-
-  // The email must be the one on the order (keeps other people from claiming with someone else's order id).
+  // Who is the customer? Taken from the Shopify order (email + phone). Typed details are only a fallback.
   let order = null;
   if (adminTest) {
     // Test Mode: if the link carried a real order number, use that order (so the free product is added to it for real)
@@ -197,9 +193,12 @@ async function handleClaim(ctx, fd) {
   } else if (settings.requireOrder) {
     order = await resolveOrder(admin, playRef);
     if (!order) return fail("unavailable", "We couldn't verify your order right now. Please try again in a moment.");
-    if (order.email && order.email !== email) {
-      return fail("email_mismatch", `Please use the email from your order (${maskEmail(order.email)}).`);
-    }
+  }
+  const typedEmail = String(fd.get("email") || "").trim().toLowerCase();
+  const email = order && order.email ? order.email : typedEmail;
+  const phone = normalizePhone(order && order.phone ? order.phone : fd.get("phone"));   // the phone number is optional
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return fail("need_contact", "Please enter your email so we can send you the prize.", { need: ["email"] });
   }
 
   const prize = await prizeForPlay(shop, row);

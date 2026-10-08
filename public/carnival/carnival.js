@@ -386,8 +386,13 @@
         '<div class="ov-title">' + esc(o.title || "You won!") + '</div>' +
         '<div class="ov-msg">' + esc(o.msg || "") + '</div>' +
         '<div class="ov-prize">' + esc(PLAY.prize.label) + '</div><br>' +
-        '<button class="btn3d" id="claimBtn">CLAIM MY PRIZE →</button>' + nextTimerHtml();
-      card.querySelector("#claimBtn").onclick = function () { claimForm(card); };
+        (PLAY.autoClaim ? '<div class="fine">✨ Adding it to your order…</div>' : '<button class="btn3d" id="claimBtn">CLAIM MY PRIZE →</button>') + nextTimerHtml();
+      if (PLAY.autoClaim) {
+        var tm = setTimeout(function () { autoClaim(card); }, 1500);
+        cleanups.push(function () { clearTimeout(tm); });
+      } else {
+        card.querySelector("#claimBtn").onclick = function () { claimForm(card); };
+      }
       tickClocks();
     } else {
       var again = PLAY && PLAY.testMode;
@@ -403,6 +408,34 @@
     }
   }
 
+  // The customer is known from their Shopify order: no form, the prize is assigned automatically.
+  function autoClaim(card) {
+    var label = PLAY.prize ? PLAY.prize.label : (PLAY.prizeLabel || "your prize");
+    card.innerHTML =
+      '<div class="ov-icon">🎁</div><div class="ov-title">Adding your prize…</div>' +
+      '<div class="ov-msg"><b>' + esc(label) + '</b><br>We are linking it to your order and your account.</div>';
+    post({ intent: "claim", orderId: PLAY.playRef })
+      .then(function (d) {
+        if (d && d.success) {
+          PLAYER_EMAIL = d.email || PLAYER_EMAIL;
+          try { if (PLAYER_EMAIL) localStorage.setItem("carnival_email", PLAYER_EMAIL); } catch (x) {}
+          updatePlayer();
+          deliveryScreen(card, d);
+        } else if (d && d.reason === "need_contact") {
+          claimForm(card);                                   // the order has no email: ask for it
+        } else {
+          claimError(card, (d && (d.error || d.message)) || "Something went wrong.");
+        }
+      })
+      .catch(function () { claimError(card, "Network error. Please check your connection."); });
+  }
+  function claimError(card, msg) {
+    card.innerHTML =
+      '<div class="ov-icon">⚠️</div><div class="ov-title">One moment</div><div class="ov-msg">' + esc(msg) + '</div>' +
+      '<button class="btn3d" id="retryClaim">TRY AGAIN</button>';
+    card.querySelector("#retryClaim").onclick = function () { autoClaim(card); };
+  }
+
   function claimForm(card) {
     var prizeLabel = PLAY.prize ? PLAY.prize.label : (PLAY.prizeLabel || "your prize");
     var hint = PLAY.hint ? " Use the email from your order (" + esc(PLAY.hint) + ")." : "";
@@ -412,7 +445,7 @@
       '<div class="ov-title">Claim your prize</div>' +
       '<div class="ov-msg"><b>' + esc(prizeLabel) + '</b>.' + hint + '</div>' +
       '<input class="ov-input" id="cEmail" type="email" inputmode="email" autocomplete="email" placeholder="Email">' +
-      '<input class="ov-input" id="cPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="Mobile number" style="margin-top:8px">' +
+      '<input class="ov-input" id="cPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="Mobile number (optional)" style="margin-top:8px">' +
       '<div class="ov-err" id="cErr"></div>' +
       '<button class="btn3d" id="cGo">GET MY PRIZE →</button>';
     var email = card.querySelector("#cEmail"), phone = card.querySelector("#cPhone"), err = card.querySelector("#cErr"), btn = card.querySelector("#cGo");
@@ -421,7 +454,7 @@
     function go() {
       var e = email.value.trim(), p = phone.value.trim();
       if (!/^[^ @]+@[^ @]+[.][^ @]+$/.test(e)) { err.textContent = "Please enter a valid email address."; return; }
-      if (p.replace(/\D/g, "").length < 10) { err.textContent = "Please enter your 10-digit mobile number."; return; }
+      if (p && p.replace(/\D/g, "").length < 10) { err.textContent = "Please enter a valid 10-digit mobile number, or leave it empty."; return; }
       err.textContent = ""; btn.disabled = true; btn.textContent = "PLEASE WAIT…";
       post({ intent: "claim", orderId: PLAY.playRef, email: e, phone: p })
         .then(function (d) {
@@ -499,9 +532,10 @@
     var box = els.stage.querySelector.bind(els.stage);
     if (d.canClaim) {
       box("#bClaim").onclick = function () {
-        PLAY = { playRef: d.playRef, win: true, prize: { label: d.prizeLabel }, prizeLabel: d.prizeLabel, hint: d.hint, testMode: false };
+        PLAY = { playRef: d.playRef, win: true, prize: { label: d.prizeLabel }, prizeLabel: d.prizeLabel, hint: d.hint, testMode: false, autoClaim: !!d.autoClaim };
         var ov = document.createElement("div"); ov.className = "ov"; var card = document.createElement("div"); card.className = "ov-card";
-        ov.appendChild(card); els.stage.appendChild(ov); claimForm(card);
+        ov.appendChild(card); els.stage.appendChild(ov);
+        if (PLAY.autoClaim) autoClaim(card); else claimForm(card);
       };
     } else if (box("#bToday")) box("#bToday").onclick = function () { switchGame(CFG.activeGame); };
     else if (box("#bShop")) box("#bShop").onclick = function () { window.location.href = shopUrl(); };
