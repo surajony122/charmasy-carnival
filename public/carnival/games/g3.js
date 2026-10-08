@@ -5,7 +5,7 @@ window.CarnivalGames[3] = function (C) {
   var GOAL = 10, TIME = 30;
   var EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
-  var basket = { x: 180, tx: 180, w: 96, y: 520, shake: 0 };
+  var LAND = C.land, basket = { x: W / 2, tx: W / 2, w: LAND ? 190 : 96, y: H - (LAND ? 74 : 80), shake: 0 };
   var items = [], pops = [];
   var masks = 0, timeLeft = TIME, spawnT = 0.4, elapsed = 0, over = false, started = false;
 
@@ -14,7 +14,7 @@ window.CarnivalGames[3] = function (C) {
     var kinds = ["🐉", "🎪", "🎡"];
     items.push({
       x: C.rand(30, W - 30), y: -30, vy: C.rand(130, 190) + elapsed * 3,
-      e: good ? "🎭" : C.pick(kinds), good: good, rot: C.rand(-0.4, 0.4), vr: C.rand(-1.5, 1.5), s: 38
+      e: good ? "🎭" : C.pick(kinds), good: good, rot: C.rand(-0.4, 0.4), vr: C.rand(-1.5, 1.5), s: LAND ? 46 : 38
     });
   }
 
@@ -83,12 +83,12 @@ window.CarnivalGames[3] = function (C) {
     if (!over) {
       if (started) { elapsed += dt; timeLeft -= dt; }
       var dir = (held.r ? 1 : 0) - (held.l ? 1 : 0);
-      if (dir) basket.tx = Math.max(basket.w / 2 + 6, Math.min(W - basket.w / 2 - 6, basket.tx + dir * 280 * dt));
+      if (dir) basket.tx = Math.max(basket.w / 2 + 6, Math.min(W - basket.w / 2 - 6, basket.tx + dir * 280 * (W / 360) * dt));
       basket.x += (basket.tx - basket.x) * Math.min(1, dt * 14);
       if (basket.shake > 0) basket.shake -= dt;
       if (started) {
         spawnT -= dt;
-        if (spawnT <= 0) { spawn(); spawnT = Math.max(0.42, 0.7 - elapsed * 0.006); }
+        if (spawnT <= 0) { spawn(); spawnT = (LAND ? 0.62 : 1) * Math.max(0.42, 0.7 - elapsed * 0.006); }
       }
       items.forEach(function (it) {
         it.y += it.vy * dt; it.rot += it.vr * dt;
@@ -124,10 +124,10 @@ window.CarnivalGames[3] = function (C) {
     });
     hud();
     if (!started && !over) {
-      ctx.fillStyle = "rgba(161,15,77,.9)"; D.rr(ctx, 40, 300, 280, 70, 20); ctx.fill();
+      ctx.fillStyle = "rgba(161,15,77,.9)"; D.rr(ctx, W / 2 - 150, H / 2 - 50, 300, 76, 20); ctx.fill();
       ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.font = "700 20px Fredoka, sans-serif"; ctx.fillText("Drag to start!", 180, 322);
-      ctx.font = "500 13px Fredoka, sans-serif"; ctx.fillText("Catch 10 masks 🎭 — dodge the rest", 180, 348);
+      ctx.font = "700 20px Fredoka, sans-serif"; ctx.fillText(LAND ? "Move your mouse to start!" : "Drag to start!", W / 2, H / 2 - 26);
+      ctx.font = "500 13px Fredoka, sans-serif"; ctx.fillText("Catch 10 masks 🎭 — dodge the rest", W / 2, H / 2);
     }
   });
 };

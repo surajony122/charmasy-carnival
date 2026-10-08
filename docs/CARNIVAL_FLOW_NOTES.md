@@ -54,6 +54,12 @@ _Last updated: 2026-10-05. Campaign: 12–20 Oct 2026, one game per day._
 - Prize-limit checks are serialized in-process (`withLock`), so keep the web service on ONE instance.
 - Home page of the app shows a green/red "Data storage" banner (green confirmed on the live app, 2026-10-05).
 
+## Desktop layout (2026-10-08)
+- Phones: tall 360x600 game area, tips under the game (unchanged). Desktop (width >= 1000 and wider than tall): wide
+  880x540 game area on the left + information column on the right (about, how to play, prizes, featured free product with
+  link, rules) and all 9 game names in the tab row. Every game has a landscape variant (`C.land` in `public/carnival/games`).
+- The free product's page link needs `productHandle` (saved by the admin product picker on Games & prizes).
+
 ## Still open
 - Emailing the code (not built; code is shown on screen and saved on the customer profile).
 - Real store install is deferred (see project memory).

@@ -2,7 +2,7 @@
 window.CarnivalGames[8] = function (C) {
   var D = C.Draw, W = C.W, H = C.H;
   var cvs = C.canvas(), ctx = cvs.ctx;
-  var CX = 30, CY = 150, CW = 300, CH = 270;   // card area
+  var LAND = C.land, CW = LAND ? 580 : 300, CH = LAND ? 300 : 270, CX = (W - CW) / 2, CY = LAND ? 118 : 150;   // card area
   var NEED = 0.65, BRUSH = 13;
 
   var O = C.outcome;                 // decided by the server
@@ -98,13 +98,13 @@ window.CarnivalGames[8] = function (C) {
     } else fade += dt;
     ctx.clearRect(0, 0, W, H);
     D.carnivalBg(ctx, time); D.bunting(ctx);
-    D.text3d(ctx, "SCRATCH & WIN", W / 2, 108, 30, "#fff", "#a10f4d");
+    D.text3d(ctx, "SCRATCH & WIN", W / 2, LAND ? 70 : 108, LAND ? 38 : 30, "#fff", "#a10f4d");
     drawCard(time);
     // progress bar
-    var bw = 260, bx = (W - bw) / 2, by = 452, fill = Math.min(1, pct / NEED);
+    var bw = LAND ? 420 : 260, bx = (W - bw) / 2, by = CY + CH + (LAND ? 40 : 32), fill = Math.min(1, pct / NEED);
     ctx.fillStyle = "rgba(0,0,0,.22)"; D.rr(ctx, bx, by, bw, 16, 8); ctx.fill();
     if (fill > 0) { ctx.fillStyle = D.lin(ctx, bx, 0, bx + bw, 0, [[0, "#ffc93c"], [1, "#ff5c97"]]); D.rr(ctx, bx, by, Math.max(16, bw * fill), 16, 8); ctx.fill(); }
     ctx.fillStyle = "#fff"; ctx.font = "600 12px Fredoka, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(revealed ? "Revealed!" : (touched ? "Keep scratching… " + Math.round(fill * 100) + "%" : "Drag your finger over the card"), W / 2, by + 34);
+    ctx.fillText(revealed ? "Revealed!" : (touched ? "Keep scratching… " + Math.round(fill * 100) + "%" : (LAND ? "Drag your mouse over the card" : "Drag your finger over the card")), W / 2, by + 34);
   });
 };

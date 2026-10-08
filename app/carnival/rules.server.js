@@ -104,7 +104,7 @@ export async function openPrizes(shop, gameId) {
     }
     open.push(p);
   }
-  const shown = open.map((p) => ({ id: p.id, kind: p.kind, label: prizeLabel(p), short: prizeShort(p), image: p.imageUrl || null }));
+  const shown = open.map((p) => ({ id: p.id, kind: p.kind, label: prizeLabel(p), short: prizeShort(p), image: p.imageUrl || null, url: p.productHandle ? "/products/" + p.productHandle : null }));
   return { cfg, open, roomTotal, shown };
 }
 
@@ -122,7 +122,7 @@ export async function rollOutcome(shop, gameId, { forceWin = false } = {}) {
     win: true,
     soldOut: false,
     prizes: shown,
-    prize: { id: chosen.id, kind: chosen.kind, label: prizeLabel(chosen), short: prizeShort(chosen), image: chosen.imageUrl || null },
+    prize: { id: chosen.id, kind: chosen.kind, label: prizeLabel(chosen), short: prizeShort(chosen), image: chosen.imageUrl || null, url: chosen.productHandle ? "/products/" + chosen.productHandle : null },
   };
 }
 

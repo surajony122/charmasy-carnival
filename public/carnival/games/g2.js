@@ -2,7 +2,8 @@
 window.CarnivalGames[2] = function (C) {
   var D = C.Draw, W = C.W, H = C.H;
   var cvs = C.canvas(), ctx = cvs.ctx;
-  var CX = 180, CY = 300, R = 128, RIM = 15;
+  var LAND = C.land;
+  var R = LAND ? 186 : 128, RIM = LAND ? 20 : 15, CX = LAND ? W * 0.37 : 180, CY = LAND ? H * 0.5 - 4 : 300, K = R / 128;
 
   // The wheel shows the prizes this game can really give (set in the app's admin), with "try again" between.
   var O = C.outcome;
@@ -29,7 +30,9 @@ window.CarnivalGames[2] = function (C) {
   }
 
   var btn = C.el("button", "btn3d spin-btn", "SPIN!");
-  btn.style.cssText = "position:absolute;left:50%;bottom:26px;transform:translateX(-50%);min-width:170px;font-size:24px;padding:14px 30px;z-index:6;letter-spacing:2px";
+  btn.style.cssText = LAND
+    ? "position:absolute;left:" + Math.round(W * 0.8) + "px;top:" + Math.round(H * 0.5) + "px;transform:translate(-50%,-50%);min-width:210px;font-size:32px;padding:20px 38px;z-index:6;letter-spacing:3px"
+    : "position:absolute;left:50%;bottom:26px;transform:translateX(-50%);min-width:170px;font-size:24px;padding:14px 30px;z-index:6;letter-spacing:2px";
   C.root.appendChild(btn);
 
   function start() {
@@ -73,15 +76,15 @@ window.CarnivalGames[2] = function (C) {
       ctx.save(); ctx.translate(CX, CY); ctx.rotate(a0 + SA / 2);
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillStyle = s.t;
-      if (s.icon) { ctx.font = "22px sans-serif"; ctx.fillText(s.icon, R * 0.74, 0); }
+      if (s.icon) { ctx.font = (22 * K) + "px sans-serif"; ctx.fillText(s.icon, R * 0.74, 0); }
       var big = !s.icon;
-      ctx.font = "700 " + (big ? 26 : 13) + "px Fredoka, sans-serif";
+      ctx.font = "700 " + ((big ? 26 : 13) * K) + "px Fredoka, sans-serif";
       if (big) {
         ctx.shadowColor = "rgba(0,0,0,.3)"; ctx.shadowBlur = 3; ctx.shadowOffsetY = 2;
-        ctx.fillText(s.l[0], R * 0.68, -6);
-        ctx.font = "700 14px Fredoka, sans-serif"; ctx.fillText(s.l[1], R * 0.68, 14);
+        ctx.fillText(s.l[0], R * 0.68, -6 * K);
+        ctx.font = "700 " + (14 * K) + "px Fredoka, sans-serif"; ctx.fillText(s.l[1], R * 0.68, 14 * K);
       } else {
-        ctx.fillText(s.l[0], R * 0.5, -8); ctx.fillText(s.l[1], R * 0.5, 8);
+        ctx.fillText(s.l[0], R * 0.5, -8 * K); ctx.fillText(s.l[1], R * 0.5, 8 * K);
       }
       ctx.restore();
     }
@@ -95,20 +98,20 @@ window.CarnivalGames[2] = function (C) {
       var ba = b * Math.PI * 2 / 20, on = ((b + Math.floor(time * 4)) % 2) === 0;
       var bx = CX + Math.cos(ba) * (R + RIM / 2 + 1), by = CY + Math.sin(ba) * (R + RIM / 2 + 1);
       ctx.fillStyle = on ? "#fffbe0" : "#e0a82a";
-      ctx.beginPath(); ctx.arc(bx, by, 4, 0, Math.PI * 2); ctx.fill();
-      if (on) { ctx.fillStyle = "rgba(255,240,150,.45)"; ctx.beginPath(); ctx.arc(bx, by, 8, 0, Math.PI * 2); ctx.fill(); }
+      ctx.beginPath(); ctx.arc(bx, by, 4 * K, 0, Math.PI * 2); ctx.fill();
+      if (on) { ctx.fillStyle = "rgba(255,240,150,.45)"; ctx.beginPath(); ctx.arc(bx, by, 8 * K, 0, Math.PI * 2); ctx.fill(); }
     }
 
     // hub dome
     var hg = ctx.createRadialGradient(CX - 8, CY - 10, 3, CX, CY, 28);
     hg.addColorStop(0, "#fff7c4"); hg.addColorStop(0.5, "#ffc93c"); hg.addColorStop(1, "#a86f00");
-    ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.beginPath(); ctx.arc(CX + 2, CY + 5, 28, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(CX, CY, 28, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#e11d63"; ctx.font = "700 12px Fredoka, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.beginPath(); ctx.arc(CX + 2, CY + 5, 28 * K, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(CX, CY, 28 * K, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#e11d63"; ctx.font = "700 " + (12 * K) + "px Fredoka, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText("CMC", CX, CY);
 
     // pointer
-    ctx.save(); ctx.translate(CX, CY - R - RIM - 4); ctx.rotate(tilt);
+    ctx.save(); ctx.translate(CX, CY - R - RIM - 4); ctx.rotate(tilt); ctx.scale(K, K);
     ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.beginPath(); ctx.moveTo(-14, -8 + 4); ctx.lineTo(14, -8 + 4); ctx.lineTo(0, 30 + 4); ctx.closePath(); ctx.fill();
     var pg = ctx.createLinearGradient(-14, 0, 14, 0); pg.addColorStop(0, "#ff7d84"); pg.addColorStop(0.5, "#ff2d45"); pg.addColorStop(1, "#9c0f18");
     ctx.fillStyle = pg; ctx.beginPath(); ctx.moveTo(-14, -8); ctx.lineTo(14, -8); ctx.lineTo(0, 30); ctx.closePath(); ctx.fill();

@@ -7,10 +7,11 @@ window.CarnivalGames[7] = function (C) {
   var pops = 3, over = false, bursts = [], texts = [];
 
   var balloons = [];
-  for (var i = 0; i < 10; i++) {
+  var COUNT = C.land ? 15 : 10;
+  for (var i = 0; i < COUNT; i++) {
     var z = C.rand(0.7, 1.15);
     balloons.push({
-      x: C.rand(40, W - 40), y: C.rand(130, H - 20), z: z, r: 30 * z,
+      x: C.rand(40, W - 40), y: C.rand(130, H - 20), z: z, r: 30 * z * (C.land ? 1.12 : 1),
       vy: C.rand(24, 46) * (0.8 + z * 0.4), ph: C.rand(0, 6), sw: C.rand(10, 26), sp: C.rand(0.8, 1.6),
       c: COLORS[i % COLORS.length], lucky: false, dead: false
     });

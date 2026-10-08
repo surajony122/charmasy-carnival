@@ -28,7 +28,7 @@ export const loader = async ({ request }) => {
       enabled: g.cfg.enabled, winChance: g.cfg.winChance, dailyLimit: g.cfg.dailyLimit, saved: g.configured,
       prizes: g.prizes.map((p) => ({
         kind: p.kind, value: p.value ?? "", productId: p.productId || "", variantId: p.variantId || "",
-        productTitle: p.productTitle || "", imageUrl: p.imageUrl || "", share: p.share ?? 1, dailyLimit: p.dailyLimit ?? "",
+        productTitle: p.productTitle || "", productHandle: p.productHandle || "", imageUrl: p.imageUrl || "", share: p.share ?? 1, dailyLimit: p.dailyLimit ?? "",
       })),
     };
   }
@@ -67,7 +67,7 @@ export const action = async ({ request }) => {
         if (!p.variantId) { warnings.push(`${GAME_NAMES[id]}: a free-product prize has no product chosen, so it will not be given out.`); }
         prizes.push({
           shop, gameId: id, kind, value: null, productId: p.productId || null, variantId: p.variantId || null,
-          productTitle: p.productTitle || null, imageUrl: p.imageUrl || null,
+          productTitle: p.productTitle || null, productHandle: p.productHandle || null, imageUrl: p.imageUrl || null,
           share: int(p.share, 1, 1000, 1), dailyLimit: p.dailyLimit === "" || p.dailyLimit == null ? null : int(p.dailyLimit, 0, 100000, 0), active: true,
         });
       } else {
@@ -112,7 +112,7 @@ export default function GamesAndPrizes() {
     ...g, [id]: { ...g[id], prizes: g[id].prizes.map((p) => (p._k === k ? { ...p, ...patch } : p)) },
   })), []);
   const addPrize = (id) => setGames((g) => ({
-    ...g, [id]: { ...g[id], prizes: [...g[id].prizes, { _k: ++keySeq, kind: "PERCENT", value: 5, productId: "", variantId: "", productTitle: "", imageUrl: "", share: 1, dailyLimit: "" }] },
+    ...g, [id]: { ...g[id], prizes: [...g[id].prizes, { _k: ++keySeq, kind: "PERCENT", value: 5, productId: "", variantId: "", productTitle: "", productHandle: "", imageUrl: "", share: 1, dailyLimit: "" }] },
   }));
   const removePrize = (id, k) => setGames((g) => ({ ...g, [id]: { ...g[id], prizes: g[id].prizes.filter((p) => p._k !== k) } }));
 
@@ -122,7 +122,7 @@ export default function GamesAndPrizes() {
     const prod = selected[0];
     const variant = (prod.variants || [])[0];
     setPrize(id, k, {
-      productId: prod.id, variantId: variant ? variant.id : "", productTitle: prod.title + (variant && variant.title && variant.title !== "Default Title" ? ` (${variant.title})` : ""),
+      productId: prod.id, productHandle: prod.handle || "", variantId: variant ? variant.id : "", productTitle: prod.title + (variant && variant.title && variant.title !== "Default Title" ? ` (${variant.title})` : ""),
       imageUrl: prod.images?.[0]?.originalSrc || prod.images?.[0]?.src || "",
     });
   };

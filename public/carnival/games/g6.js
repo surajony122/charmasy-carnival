@@ -12,7 +12,7 @@ window.CarnivalGames[6] = function (C) {
   function spawn() {
     var gold = Math.random() < 0.13;
     bubbles.push({
-      x: C.rand(34, W - 34), y: H + 40, vy: C.rand(150, 235), r: gold ? 30 : 28,
+      x: C.rand(34, W - 34), y: H + 40, vy: C.rand(150, 235), r: (gold ? 30 : 28) * (C.land ? 1.2 : 1),
       e: gold ? "✨" : C.pick(KINDS), gold: gold, ph: C.rand(0, 6), amp: C.rand(8, 22)
     });
   }
@@ -64,7 +64,7 @@ window.CarnivalGames[6] = function (C) {
     if (started && !over) {
       left -= dt;
       spawnT -= dt;
-      if (spawnT <= 0) { spawn(); spawnT = C.rand(0.2, 0.34); }
+      if (spawnT <= 0) { spawn(); spawnT = C.rand(0.2, 0.34) * (C.land ? 0.55 : 1); }
       if (left <= 0) { left = 0; end(); }
     }
     if (comboFlash > 0) comboFlash -= dt;
@@ -101,7 +101,7 @@ window.CarnivalGames[6] = function (C) {
     pill(W / 2 - 52, 38, 104, "⏱ " + Math.ceil(left));
     pill(W - 124, 38, 112, "TO BEAT " + BEAT, "#fff3c4");
     // progress to beat
-    var bw = 300, bx = 30, by = 80;
+    var bw = Math.min(520, W - 60), bx = (W - bw) / 2, by = 80;
     ctx.fillStyle = "rgba(0,0,0,.2)"; D.rr(ctx, bx, by, bw, 12, 6); ctx.fill();
     var pr = Math.min(1, score / (BEAT * 2));
     ctx.fillStyle = score > BEAT ? "#3ddc84" : "#ffc93c"; if (pr > 0) { D.rr(ctx, bx, by, Math.max(12, bw * pr), 12, 6); ctx.fill(); }
@@ -115,10 +115,10 @@ window.CarnivalGames[6] = function (C) {
     ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.font = "600 10px Fredoka, sans-serif"; ctx.fillText("5 same in a row = COMBO", W / 2, 140);
 
     if (!started) {
-      ctx.fillStyle = "rgba(161,15,77,.92)"; D.rr(ctx, 40, 290, 280, 80, 22); ctx.fill();
+      ctx.fillStyle = "rgba(161,15,77,.92)"; D.rr(ctx, W / 2 - 150, H / 2 - 45, 300, 86, 22); ctx.fill();
       ctx.fillStyle = "#fff"; ctx.textBaseline = "middle"; ctx.textAlign = "center";
-      ctx.font = "700 24px Fredoka, sans-serif"; ctx.fillText("TAP TO START", 180, 318);
-      ctx.font = "500 13px Fredoka, sans-serif"; ctx.fillText("Pop products fast — beat " + BEAT + " points!", 180, 348);
+      ctx.font = "700 24px Fredoka, sans-serif"; ctx.fillText("TAP TO START", W / 2, H / 2 - 16);
+      ctx.font = "500 13px Fredoka, sans-serif"; ctx.fillText("Pop products fast — beat " + BEAT + " points!", W / 2, H / 2 + 14);
     }
   });
 };

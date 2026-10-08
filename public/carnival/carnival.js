@@ -4,36 +4,47 @@
   "use strict";
 
   var CFG = window.CARNIVAL || {};
-  var W = 360, H = 600;
+  var W = 360, H = 600;       // game area size: phones 360x600 (portrait), desktop 880x540 (landscape)
+  var LAND = false;
+  function wantLand() { return window.innerWidth >= 1000 && window.innerWidth / window.innerHeight >= 1.15; }
   var Games = (window.CarnivalGames = {});
 
   var META = [
     null,
-    { tab: "Claw", icon: "🕹️", title: "Charmacy Claw", day: 12,
+    { tab: "Claw", nm: "Charmacy Claw", icon: "🕹️", title: "Charmacy Claw", day: 12,
+      about: "A real claw machine full of gift boxes. Line up the claw, drop it, and carry a box to the prize chute.",
       tips: ["Hold ◀ ▶ to move the claw.", "Press DROP over a gift box.", "Carry it to the chute to win."],
       reward: "Win a NIA free product or a coupon" },
-    { tab: "Spin", icon: "🎡", title: "Spin the Glam Wheel", day: 13,
+    { tab: "Spin", nm: "Glam Wheel", icon: "🎡", title: "Spin the Glam Wheel", day: 13,
+      about: "One spin of the glam wheel. Land on a prize slice and it is yours.",
       tips: ["Tap SPIN to turn the wheel.", "Wait for it to stop.", "Land on a prize to win it."],
       reward: "Win a NIA free product · 5% · 10% OFF" },
-    { tab: "Catch", icon: "🎭", title: "Catch My Charmacy", day: 14,
+    { tab: "Catch", nm: "Catch Charmacy", icon: "🎭", title: "Catch My Charmacy", day: 14,
+      about: "Masks, dragons, tents and Ferris wheels fall from the sky. Catch 10 masks before time runs out.",
       tips: ["Drag the basket left and right.", "Catch 10 masks 🎭 to win.", "Dodge dragons, tents and wheels."],
       reward: "Win a NIA free product or 5% OFF" },
-    { tab: "Shade", icon: "💄", title: "Pick the Right Shade", day: 15,
+    { tab: "Shade", nm: "Pick the Shade", icon: "💄", title: "Pick the Right Shade", day: 15,
+      about: "Show off your beauty know-how: spot the shade that matches its name in just 10 seconds.",
       tips: ["Read the shade name.", "Tap the matching colour.", "You have only 10 seconds."],
       reward: "Win a NIA free product · 5% · 10% OFF" },
-    { tab: "Match", icon: "🃏", title: "Mirror Match", day: 16,
+    { tab: "Match", nm: "Mirror Match", icon: "🃏", title: "Mirror Match", day: 16,
+      about: "Twelve beauty cards, one matching pair. Memorise them, then find the twins in three chances.",
       tips: ["Memorise the cards.", "Find the 2 identical ones.", "You get 3 chances."],
       reward: "Win a 5% OFF coupon" },
-    { tab: "Tap", icon: "✨", title: "Tap the Sparkle", day: 17,
+    { tab: "Tap", nm: "Tap the Sparkle", icon: "✨", title: "Tap the Sparkle", day: 17,
+      about: "Pop the floating products as fast as you can. Gold sparkles and combos score extra. Beat the score to win.",
       tips: ["Tap the products fast.", "Gold sparkles score extra.", "Beat the score to win."],
       reward: "Win a NIA free product or a coupon" },
-    { tab: "Balloons", icon: "🎈", title: "Birthday Balloon Pop", day: 18,
+    { tab: "Balloons", nm: "Balloon Pop", icon: "🎈", title: "Birthday Balloon Pop", day: 18,
+      about: "Charmacy's birthday balloons are floating by. One of them hides a surprise. You get three pops to find it.",
       tips: ["Tap a balloon to pop it.", "Find the lucky balloon.", "You get 3 pops."],
       reward: "Win a NIA free product or a coupon" },
-    { tab: "Scratch", icon: "🎟️", title: "Scratch & Win", day: 19,
+    { tab: "Scratch", nm: "Scratch & Win", icon: "🎟️", title: "Scratch & Win", day: 19,
+      about: "Scratch the shiny foil with your finger or mouse. Keep going to reveal what is underneath.",
       tips: ["Drag to scratch the card.", "Keep going to reveal it.", "Reveal your coupon prize."],
       reward: "Win a 5% or 10% OFF coupon" },
-    { tab: "Puzzle", icon: "🧩", title: "Beauty Word Puzzle", day: 20,
+    { tab: "Puzzle", nm: "Word Puzzle", icon: "🧩", title: "Beauty Word Puzzle", day: 20,
+      about: "Two beauty words are hiding in the letter grid, even diagonally and backwards. Find both before the clock runs out.",
       tips: ["Find the 2 hidden words.", "Drag across the letters.", "Beat the clock to win."],
       reward: "Win a NIA free product or a coupon" }
   ];
@@ -169,13 +180,12 @@
     },
     // string of bulbs/bunting across the top
     bunting: function (ctx, t) {
-      var cols = ["#ff5c97", "#ffc93c", "#14b8a6", "#ffffff", "#e11d63"];
+      var cols = ["#ff5c97", "#ffc93c", "#14b8a6", "#ffffff", "#e11d63"], n = Math.max(9, Math.round(W / 40));
       ctx.save();
       ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(0, 6); ctx.quadraticCurveTo(W / 2, 30, W, 6); ctx.stroke();
-      for (var i = 0; i < 9; i++) {
-        var u = (i + 0.5) / 9, x = u * W, y = 6 + 2 * 0.5 * 24 * (1 - Math.pow(2 * u - 1, 2)) * 1.0;
-        y = 6 + 24 * (1 - Math.pow(2 * u - 1, 2)) * 0.5 * 2 * 0.5 + 0;
+      for (var i = 0; i < n; i++) {
+        var u = (i + 0.5) / n, x = u * W, y = 6 + 12 * (1 - Math.pow(2 * u - 1, 2));
         ctx.fillStyle = cols[i % cols.length];
         ctx.beginPath(); ctx.moveTo(x - 10, y); ctx.lineTo(x + 10, y); ctx.lineTo(x, y + 20); ctx.closePath(); ctx.fill();
         ctx.fillStyle = "rgba(255,255,255,.35)";
@@ -183,18 +193,19 @@
       }
       ctx.restore();
     },
-    // pink carnival sky with tent + ferris wheel silhouettes
+    // pink carnival sky with tent + ferris wheel silhouettes (scales to any game-area size)
     carnivalBg: function (ctx, t) {
-      var D = Draw;
+      var D = Draw, k = H / 600, ground = H * 0.783;
       ctx.fillStyle = D.lin(ctx, 0, 0, 0, H, [[0, "#ffb3cf"], [0.55, "#ff6fa3"], [1, "#c2185b"]]);
       ctx.fillRect(0, 0, W, H);
       // soft clouds
       ctx.fillStyle = "rgba(255,255,255,.35)";
-      [[60, 90, 34], [95, 80, 26], [30, 96, 24], [290, 130, 30], [320, 118, 22], [262, 138, 22]].forEach(function (c) {
-        ctx.beginPath(); ctx.arc(c[0], c[1], c[2], 0, Math.PI * 2); ctx.fill();
-      });
+      var clouds = LAND
+        ? [[.07, .16, 40], [.12, .14, 30], [.03, .18, 28], [.30, .10, 30], [.56, .13, 36], [.62, .11, 26], [.9, .12, 32], [.95, .2, 24]]
+        : [[.17, .15, 34], [.26, .13, 26], [.08, .16, 24], [.8, .22, 30], [.89, .2, 22], [.73, .23, 22]];
+      clouds.forEach(function (c) { ctx.beginPath(); ctx.arc(c[0] * W, c[1] * H, c[2] * k, 0, Math.PI * 2); ctx.fill(); });
       // ferris wheel
-      var cx = 280, cy = 250, R = 82;
+      var cx = W * (LAND ? 0.86 : 0.78), cy = H * (LAND ? 0.45 : 0.42), R = LAND ? H * 0.22 : 82;
       ctx.save(); ctx.translate(cx, cy);
       ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke();
@@ -208,28 +219,32 @@
       }
       ctx.restore();
       ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(cx - 40, cy + 150); ctx.lineTo(cx, cy); ctx.lineTo(cx + 40, cy + 150); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx - R * 0.5, ground + 4); ctx.lineTo(cx, cy); ctx.lineTo(cx + R * 0.5, ground + 4); ctx.stroke();
       // tents
       function tent(x, base, w, h, c1) {
         ctx.fillStyle = D.shade(c1, 0.3);
         ctx.beginPath(); ctx.moveTo(x - w / 2, base); ctx.lineTo(x, base - h); ctx.lineTo(x + w / 2, base); ctx.closePath(); ctx.fill();
         ctx.fillStyle = "rgba(255,255,255,.55)";
-        for (var k = -2; k <= 2; k += 2) { ctx.beginPath(); ctx.moveTo(x + k * w / 10 - w / 12, base); ctx.lineTo(x, base - h); ctx.lineTo(x + k * w / 10 + w / 12, base); ctx.closePath(); ctx.fill(); }
+        for (var q = -2; q <= 2; q += 2) { ctx.beginPath(); ctx.moveTo(x + q * w / 10 - w / 12, base); ctx.lineTo(x, base - h); ctx.lineTo(x + q * w / 10 + w / 12, base); ctx.closePath(); ctx.fill(); }
         ctx.fillStyle = "#ffe08a"; ctx.fillRect(x - 1.5, base - h - 14, 3, 14);
         ctx.fillStyle = "#e11d63"; ctx.beginPath(); ctx.moveTo(x + 1.5, base - h - 14); ctx.lineTo(x + 14, base - h - 9); ctx.lineTo(x + 1.5, base - h - 4); ctx.closePath(); ctx.fill();
       }
-      tent(70, 470, 130, 90, "#ff5c97");
-      tent(190, 480, 110, 70, "#e11d63");
+      if (LAND) {
+        tent(W * 0.09, ground, 170, 118, "#ff5c97"); tent(W * 0.27, ground + 8, 140, 90, "#e11d63");
+        tent(W * 0.50, ground + 4, 150, 100, "#ff5c97"); tent(W * 0.69, ground + 10, 120, 80, "#e11d63");
+      } else {
+        tent(70, ground, 130, 90, "#ff5c97"); tent(190, ground + 10, 110, 70, "#e11d63");
+      }
       // ground
-      ctx.fillStyle = D.lin(ctx, 0, 480, 0, H, [[0, "#ff8fb8"], [1, "#a10f4d"]]);
-      ctx.fillRect(0, 470, W, H - 470);
+      ctx.fillStyle = D.lin(ctx, 0, ground + 10, 0, H, [[0, "#ff8fb8"], [1, "#a10f4d"]]);
+      ctx.fillRect(0, ground, W, H - ground);
     }
   });
 
   /* ---------------- per-game API ---------------- */
   function makeApi() {
     var stage = els.stage;
-    var A = { W: W, H: H, root: stage, Draw: Draw };
+    var A = { W: W, H: H, land: LAND, root: stage, Draw: Draw };
     A.rand = rand; A.pick = pickOne; A.shuffle = shuffle; A.weighted = weighted;
     A.prize = function (key) { return PRIZE[key] || key; };
     A.el = function (tag, cls, html) {
@@ -241,6 +256,7 @@
     A.canvas = function () {
       var cv = document.createElement("canvas");
       cv.width = W * 2; cv.height = H * 2; cv.className = "cv";
+      cv.style.width = W + "px"; cv.style.height = H + "px";
       var ctx = cv.getContext("2d");
       ctx.scale(2, 2);
       stage.appendChild(cv);
@@ -498,8 +514,10 @@
       '<h1 class="title" id="title"></h1>' +
       (CFG.isTest ? '<button class="mode-pill" id="modeBtn"></button>' : "") +
       '<nav class="tabs" id="tabs" aria-label="Games"></nav>' +
+      '<div class="main"><div class="stage-col">' +
       '<div class="stage-frame" id="frame"><div class="stage-box" id="box"><div class="stage" id="stage"></div></div></div>' +
       '<ul class="tips" id="tips"></ul><div class="reward" id="reward"></div>' +
+      '</div><aside class="side" id="side"></aside></div>' +
       '<div class="foot">SHOP • PLAY • WIN • REPEAT</div>' +
       '</div>';
     els.stage = document.getElementById("stage");
@@ -509,6 +527,8 @@
     els.title = document.getElementById("title");
     els.tips = document.getElementById("tips");
     els.reward = document.getElementById("reward");
+    els.side = document.getElementById("side");
+    els.col = els.frame.parentNode;
     els.player = document.getElementById("player");
     els.mode = document.getElementById("modeBtn");
     if (els.mode) {
@@ -516,6 +536,16 @@
       renderMode();
     }
     updatePlayer();
+    applyMode();
+  }
+
+  // Phones get the tall 360x600 game area; desktops get a wide 880x540 one.
+  function applyMode() {
+    LAND = wantLand();
+    W = LAND ? 880 : 360; H = LAND ? 540 : 600;
+    document.body.classList.toggle("desk", LAND);
+    els.stage.style.width = W + "px"; els.stage.style.height = H + "px";
+    els.stage.classList.toggle("land", LAND);
   }
   function renderMode() {
     els.mode.textContent = testMode ? "🟢 Test mode — tap to preview as a customer" : "🔒 Customer preview — tap for test mode";
@@ -526,12 +556,17 @@
 
   function fit() {
     if (!els.box) return;
-    var wrap = els.frame.parentNode;
     var pad = parseFloat(getComputedStyle(els.frame).paddingLeft) || 10;
-    var availW = wrap.clientWidth - 2 * pad - 2;
-    var vh = window.innerHeight;
-    var targetH = Math.max(vh * 0.74 - 2 * pad, 440);
-    var s = Math.min(availW / W, targetH / H, 1.45);
+    var availW = els.col.clientWidth - 2 * pad - 2;
+    var vh = window.innerHeight, s;
+    if (LAND) {
+      var top = els.frame.getBoundingClientRect().top + window.scrollY;
+      var roomH = Math.max(vh - Math.min(top, vh * 0.34) - 2 * pad - 30, 380);
+      s = Math.min(availW / W, roomH / H, 1.6);
+    } else {
+      var targetH = Math.max(vh * 0.74 - 2 * pad, 440);
+      s = Math.min(availW / W, targetH / H, 1.45);
+    }
     els.box.style.width = Math.round(W * s) + "px";
     els.box.style.height = Math.round(H * s) + "px";
     els.stage.style.transform = "scale(" + s + ")";
@@ -544,7 +579,7 @@
         var m = META[id], b = document.createElement("button");
         b.className = "tab" + (id === curId ? " active" : "") + (isLocked(id) ? " tab-locked" : "");
         b.setAttribute("data-id", id);
-        b.innerHTML = (isLocked(id) ? "🔒 " : m.icon + " ") + esc(m.tab);
+        b.innerHTML = (isLocked(id) ? "🔒 " : m.icon + " ") + esc(LAND ? m.nm : m.tab);
         b.onclick = function () { switchGame(id); };
         els.tabs.appendChild(b);
       })(i);
@@ -556,6 +591,32 @@
     els.title.textContent = m.title;
     els.tips.innerHTML = m.tips.map(function (t, i) { return "<li><b>" + (i + 1) + "</b>" + esc(t) + "</li>"; }).join("");
     els.reward.textContent = "🎁 " + m.reward;
+    renderSide(id);
+  }
+
+  // Right-hand column on desktop: about, how to play, what you can win, featured product, rules.
+  function renderSide(id) {
+    var m = META[id], prizes = PLAY && PLAY.prizes && PLAY.prizes.length ? PLAY.prizes : null;
+    var feat = null;
+    if (prizes) for (var i = 0; i < prizes.length; i++) if (prizes[i].kind === "FREE_PRODUCT" && prizes[i].image) { feat = prizes[i]; break; }
+    var win = prizes
+      ? prizes.map(function (p) {
+          var gift = p.kind === "FREE_PRODUCT";
+          return '<li>' + (gift && p.image ? '<img src="' + esc(p.image) + '" alt="">' : '<span class="pi">' + (gift ? "🎁" : "🏷️") + '</span>') + '<span>' + esc(p.label) + '</span></li>';
+        }).join("")
+      : '<li><span class="pi">🎁</span><span>' + esc(m.reward.replace(/^Win (a |an )?/i, "")) + '</span></li>';
+    var days = (PLAY && PLAY.days) || 7;
+    els.side.innerHTML =
+      '<div class="side-card">' +
+      '<div class="eyebrow">GAME ' + curId + ' OF 9 · ' + m.day + ' OCT</div>' +
+      '<h2>' + esc(m.title) + '</h2>' +
+      '<p class="about">' + esc(m.about || "") + '</p>' +
+      '<h3>How to play</h3><ol class="steps">' + m.tips.map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("") + '</ol>' +
+      '<h3>What you can win</h3><ul class="wins">' + win + '</ul>' +
+      (feat ? '<div class="feat"><img src="' + esc(feat.image) + '" alt=""><div><b>' + esc(feat.label.replace(/^FREE\s*/i, "")) + '</b><small>Free gift</small>' +
+        (feat.url ? '<a href="' + esc(feat.url) + '" target="_blank" rel="noopener">Meet the product ↗</a>' : "") + '</div></div>' : "") +
+      '<ul class="rules"><li>One order = one play.</li><li>Coupons are single-use and valid for ' + days + ' days.</li><li>Free gifts are added to your order automatically.</li></ul>' +
+      '</div>';
   }
 
   function launch(id) {
@@ -563,7 +624,7 @@
     var token = launchToken;
     attempt++;
     PLAY = null;
-    els.stage.className = "stage g" + id;
+    els.stage.className = "stage g" + id + (LAND ? " land" : "");
     renderLoading();
     var early = CFG.earlyPlay && CFG.earlyPlay.id === id && attempt === 1 ? CFG.earlyPlay.p : null;
     if (CFG.earlyPlay) CFG.earlyPlay = null;      // only ever used for the very first launch
@@ -573,14 +634,8 @@
         if (token !== launchToken) return;
         if (!d || !d.ok) { renderBlocked(d || {}, id); return; }
         PLAY = d;
-        els.stage.innerHTML = "";
-        try {
-          if (!Games[id]) throw new Error("Game " + id + " not loaded");
-          Games[id](makeApi());
-        } catch (e) {
-          console.error(e);
-          els.stage.innerHTML = '<div class="locked"><div class="big">🎪</div><h3>Oops!</h3><p>This game could not load. Please refresh the page.</p></div>';
-        }
+        renderSide(id);
+        runGame(id);
       })
       .catch(function () {
         if (token !== launchToken) return;
@@ -588,10 +643,35 @@
       });
   }
 
+  // Runs the game with the play the server already decided (also used when the window changes shape).
+  function runGame(id) {
+    els.stage.className = "stage g" + id + (LAND ? " land" : "");
+    els.stage.innerHTML = "";
+    try {
+      if (!Games[id]) throw new Error("Game " + id + " not loaded");
+      Games[id](makeApi());
+    } catch (e) {
+      console.error(e);
+      els.stage.innerHTML = '<div class="locked"><div class="big">🎪</div><h3>Oops!</h3><p>This game could not load. Please refresh the page.</p></div>';
+    }
+  }
+
+  function onResize() {
+    var was = LAND;
+    applyMode();
+    if (was !== LAND && curId) {
+      renderTabs();
+      if (isLocked(curId)) { cleanup(); renderLocked(curId); }
+      else if (PLAY && PLAY.ok) { cleanup(); runGame(curId); }
+    }
+    fit();
+  }
+
   function switchGame(id, force) {
     if (!force && id === curId) return;
     curId = id;
     cleanup();
+    PLAY = null;
     renderTabs();
     setInfo(id);
     var active = els.tabs.querySelector(".tab.active");
@@ -721,8 +801,8 @@
     start: function () {
       build();
       fit();
-      window.addEventListener("resize", fit);
-      window.addEventListener("orientationchange", function () { setTimeout(fit, 200); });
+      window.addEventListener("resize", onResize);
+      window.addEventListener("orientationchange", function () { setTimeout(onResize, 200); });
       var first = CFG.initialGame || CFG.activeGame || 1;
       if (isLocked(first) && CFG.activeGame) first = CFG.activeGame;
       switchGame(first, true);

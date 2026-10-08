@@ -66,7 +66,7 @@ async function context(request) {
 }
 
 const fail = (reason, message, extra = {}) => ({ ok: false, success: false, reason, message, error: message, ...extra });
-const publicPrize = (p) => (p ? { label: p.label, kind: p.kind, short: p.short, image: p.image || null } : null);
+const publicPrize = (p) => (p ? { label: p.label, kind: p.kind, short: p.short, image: p.image || null, url: p.url || null } : null);
 
 /* ---------------- play: the server decides the outcome when a play starts ---------------- */
 async function handlePlay(ctx, fd) {
@@ -117,7 +117,7 @@ async function handlePlay(ctx, fd) {
     // started but not finished (page was closed or refreshed): same outcome, no re-roll
     const { shown } = await openPrizes(shop, gameId);
     return {
-      ok: true, success: true, playRef, resumed: true, win: !!row.outcomeWin, soldOut: false, testMode: adminTest,
+      ok: true, success: true, playRef, resumed: true, win: !!row.outcomeWin, soldOut: false, testMode: adminTest, days: settings.couponDays || 7,
       prize: row.outcomeWin ? { label: row.prizeLabel, kind: row.prizeKind, short: shortOf(row) } : null,
       prizes: shown, orderName: order?.name || "", hint: order ? maskEmail(order.email) : "",
     };
@@ -141,7 +141,7 @@ async function handlePlay(ctx, fd) {
   });
   if (duplicate) return fail("already_played", "You've already used the play for this order.");
   return {
-    ok: true, success: true, playRef, resumed: false, win: o.win, soldOut: !!o.soldOut, testMode: adminTest,
+    ok: true, success: true, playRef, resumed: false, win: o.win, soldOut: !!o.soldOut, testMode: adminTest, days: settings.couponDays || 7,
     prize: publicPrize(o.prize), prizes: o.prizes, orderName: order?.name || "", hint: order ? maskEmail(order.email) : "",
   };
 }

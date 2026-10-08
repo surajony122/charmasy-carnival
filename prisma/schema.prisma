@@ -89,6 +89,7 @@ model PrizeConfig {
   productId    String?
   variantId    String?
   productTitle String?
+  productHandle String?
   imageUrl     String?
   share        Int     @default(1) // relative weight when a win is rolled
   dailyLimit   Int?    // optional cap for this prize per day
