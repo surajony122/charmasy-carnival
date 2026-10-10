@@ -41,8 +41,8 @@ export async function sendTemplate(creds, { to, templateId, body, button, callba
   };
   if (callbackData) payload.callbackData = JSON.stringify(callbackData);
   const auth = "Basic " + Buffer.from(`${creds.key}:${creds.secret}`).toString("base64");
-  let last = "";
-  for (let attempt = 0; attempt < 3; attempt++) {
+  let last = "", swapped = false;
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const res = await fetch(URL_SEND, { method: "POST", headers: { Authorization: auth, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const text = await res.text().catch(() => "");
@@ -51,7 +51,10 @@ export async function sendTemplate(creds, { to, templateId, body, button, callba
       const detail = (j && (j.error || (j.errors && j.errors.map((e) => e.message).join("; ")) || j.message)) || text.slice(0, 200) || `HTTP ${res.status}`;
       last = `Bik ${(j && j.status) || res.status}: ${detail}`;
       const code = Number((j && j.status) || res.status);
-      if (code !== 429 && code < 500) return { ok: false, error: last };   // a rejected message will not get better
+      if (/Button at index \d+ must be of type/i.test(String(detail)) && button && button.length === 2 && !swapped) {
+        swapped = true; payload.payload.components.button = swapButtons(button); continue;      // the template has the buttons the other way round
+      }
+      if (!(code === 429 || (code >= 500 && code < 600))) return { ok: false, error: last };   // only rate limits and server errors are worth retrying   // a rejected message will not get better
     } catch (e) {
       last = String(e.message || e);
     }
@@ -62,7 +65,9 @@ export async function sendTemplate(creds, { to, templateId, body, button, callba
 
 // ---- the three messages ----
 const validText = (w) => (w.startsAt.getTime() > Date.now() + 3600000 ? `${lastDayText(w.endsAt)} (active from ${startDayText(w.startsAt)})` : lastDayText(w.endsAt));
-const codeButtons = (code) => [{ type: "URL", index: 0, data: code }, { type: "copy_code", index: 1, data: code }];
+// Order must match the template in Bik: Copy coupon code first, Shop Now (link) second. sendTemplate swaps them if Bik says otherwise.
+const codeButtons = (code) => [{ type: "copy_code", index: 0, data: code }, { type: "URL", index: 1, data: code }];
+const swapButtons = (btns) => btns.slice().reverse().map((b, i) => ({ ...b, index: i }));
 
 export const winMessage = (settings, play, w) => ({ to: play.phone, templateId: settings.bikWinTemplate, body: [play.prizeLabel, play.couponCode, validText(w)], button: codeButtons(play.couponCode), callbackData: { play: play.orderId, kind: "win" } });
 export const reminderMessage = (settings, play, w, now = Date.now()) => ({
