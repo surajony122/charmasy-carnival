@@ -9,6 +9,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { GAME_NAMES, SKILL_GAMES } from "../carnival/constants";
 import { loadGame, getSettings } from "../carnival/rules.server";
+import { normalizePhone } from "../carnival/shopify-ops.server";
 import { encryptKey, omnisendConfigured, keyHint, resolveKey, sendTestEvent } from "../carnival/omnisend.server";
 
 const KINDS = [
@@ -48,7 +49,7 @@ export const action = async ({ request }) => {
   const fd = await request.formData();
   if (fd.get("omnisendTest")) {
     const email = String(fd.get("omnisendTest")).trim().toLowerCase();
-    const phone = String(fd.get("omnisendTestPhone") || "").replace(/[^\d+]/g, "").slice(0, 15);
+    const phone = normalizePhone(String(fd.get("omnisendTestPhone") || "")) || "";   // same +91 handling as real wins
     if (!/^[^ @]+@[^ @]+[.][^ @]+$/.test(email)) return json({ omnisendTest: { ok: false, error: "Type a valid email address first." } });
     const key = resolveKey(await getSettings(shop));
     if (!key) return json({ omnisendTest: { ok: false, error: "Save your Omnisend API key first, then send the test." } });
