@@ -98,3 +98,16 @@ export function notifyOmnisend(play, opts) {
     return r;
   });
 }
+
+// Admin "send a test event": a sample win for an address the owner types (no order or play needed).
+export async function sendTestEvent(key, email, phone) {
+  const contact = { email };
+  if (phone) contact.phone = phone;
+  return post({
+    eventName: EVENT_NAME, origin: "api", contact,
+    properties: {
+      coupon_code: "CHM-TEST01", prize: "10% OFF Coupon", expires: expiryText(7), game: GAME_NAMES[6] || "Fortune Cookie",
+      kind: "coupon", delivery: "code", order: "TEST", note: "Test event from the Carnival app", whatsapp_consent: false,
+    },
+  }, key);
+}

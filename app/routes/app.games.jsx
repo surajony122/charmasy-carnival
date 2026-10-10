@@ -9,7 +9,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { GAME_NAMES, SKILL_GAMES } from "../carnival/constants";
 import { loadGame, getSettings } from "../carnival/rules.server";
-import { encryptKey, omnisendConfigured, keyHint } from "../carnival/omnisend.server";
+import { encryptKey, omnisendConfigured, keyHint, resolveKey, sendTestEvent } from "../carnival/omnisend.server";
 
 const KINDS = [
   { label: "% OFF coupon", value: "PERCENT" },
@@ -46,6 +46,15 @@ export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const fd = await request.formData();
+  if (fd.get("omnisendTest")) {
+    const email = String(fd.get("omnisendTest")).trim().toLowerCase();
+    const phone = String(fd.get("omnisendTestPhone") || "").replace(/[^\d+]/g, "").slice(0, 15);
+    if (!/^[^ @]+@[^ @]+[.][^ @]+$/.test(email)) return json({ omnisendTest: { ok: false, error: "Type a valid email address first." } });
+    const key = resolveKey(await getSettings(shop));
+    if (!key) return json({ omnisendTest: { ok: false, error: "Save your Omnisend API key first, then send the test." } });
+    const r = await sendTestEvent(key, email, phone);
+    return json({ omnisendTest: { ok: r.ok, error: r.error || "", email } });
+  }
   let data;
   try { data = JSON.parse(String(fd.get("payload") || "{}")); } catch { return json({ ok: false, error: "Could not read the form." }); }
 
@@ -117,6 +126,14 @@ export default function GamesAndPrizes() {
   const [omniMode, setOmniMode] = useState(data.omnisendMode);
   const [omniKey, setOmniKey] = useState("");
   const [omniRemove, setOmniRemove] = useState(false);
+  const [testEmail, setTestEmail] = useState("");
+  const [testPhone, setTestPhone] = useState("");
+  const sendTest = () => {
+    const fd = new FormData();
+    fd.append("omnisendTest", testEmail);
+    fd.append("omnisendTestPhone", testPhone);
+    submit(fd, { method: "post" });
+  };
 
   const setGame = useCallback((id, patch) => setGames((g) => ({ ...g, [id]: { ...g[id], ...patch } })), []);
   const setPrize = useCallback((id, k, patch) => setGames((g) => ({
@@ -167,7 +184,11 @@ export default function GamesAndPrizes() {
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
-            {result?.ok ? (
+            {result?.omnisendTest ? (
+              result.omnisendTest.ok
+                ? <Banner tone="success" title={`Test event sent for ${result.omnisendTest.email}.`}>Open Omnisend > Store settings > API > API logs to see it, and check your automation ran.</Banner>
+                : <Banner tone="critical" title="The test event was not sent.">{result.omnisendTest.error}</Banner>
+            ) : result?.ok ? (
               <Banner tone="success" title="Saved. Changes apply to the next play.">
                 {result.warnings?.length ? <ul>{result.warnings.map((w) => <li key={w}>{w}</li>)}</ul> : null}
               </Banner>
@@ -215,6 +236,17 @@ export default function GamesAndPrizes() {
                     value={omniMode} onChange={setOmniMode}
                   />
                 </div>
+                {data.omnisendKey ? (
+                  <div style={{ maxWidth: 560 }}>
+                    <BlockStack gap="200">
+                      <Text as="p" variant="bodyMd" fontWeight="semibold">Test Omnisend</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">Sends a sample win (code CHM-TEST01) to the address below, so you can check your automation, email and WhatsApp without placing an order.</Text>
+                      <TextField label="Send the test to this email" type="email" value={testEmail} onChange={setTestEmail} autoComplete="off" />
+                      <TextField label="Mobile number for WhatsApp (optional, with country code)" type="tel" value={testPhone} onChange={setTestPhone} autoComplete="off" placeholder="+919876543210" />
+                      <InlineStack><Button onClick={sendTest} loading={saving} disabled={!testEmail}>Send test event</Button></InlineStack>
+                    </BlockStack>
+                  </div>
+                ) : null}
                 <Checkbox
                   label="Spread the free gifts through the day"
                   helpText="On: the day's free gifts are released gradually (for 6 gifts, one every 4 hours), so they do not all go in the first hour. Customers are never told how many there are."
