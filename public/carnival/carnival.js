@@ -492,7 +492,13 @@
 
   function deliveryScreen(card, d) {
     var label = d.prizeLabel || (PLAY && PLAY.prize && PLAY.prize.label) || "Your prize";
-    if (d.delivery === "order_edit") {
+    if (d.delivery === "pack") {
+      card.innerHTML =
+        '<div class="ov-icon">🎁</div><div class="ov-title">Your gift is on its way!</div>' +
+        '<div class="ov-msg"><b>' + esc(label) + '</b> will be packed together with your order. ' + esc(d.note || "") + '</div>' +
+        '<button class="btn3d gold" id="cShop">KEEP SHOPPING →</button>' +
+        '<div class="fine">Nothing else to do — you will find it in your parcel.</div>' + nextTimerHtml();
+    } else if (d.delivery === "order_edit") {
       card.innerHTML =
         '<div class="ov-icon">🎁</div><div class="ov-title">Added to your order!</div>' +
         '<div class="ov-msg"><b>' + esc(label) + '</b> has been added to your order at no cost. ' + esc(d.note || "") + '</div>' +
@@ -510,6 +516,20 @@
       card.querySelector("#cCopy").onclick = function () { copyText(d.code, this); };
     }
     tickClocks();
+    // "Send my code on WhatsApp": only when the store owner chose the button mode (the tap is the customer's consent)
+    if (d.notifyBtn || d.notified) {
+      var wa = document.createElement("button");
+      wa.className = "btn3d small"; wa.id = "cWa"; wa.style.cssText = "margin:8px auto;display:block";
+      wa.textContent = d.notified ? "✓ SENT TO YOUR WHATSAPP" : "📲 SEND IT TO MY WHATSAPP";
+      wa.disabled = !!d.notified;
+      wa.onclick = function () {
+        wa.disabled = true; wa.textContent = "SENDING…";
+        post({ intent: "notify", orderId: PLAY.playRef })
+          .then(function (r) { if (r && r.success) wa.textContent = "✓ SENT TO YOUR WHATSAPP"; else { wa.disabled = false; wa.textContent = "TRY AGAIN"; } })
+          .catch(function () { wa.disabled = false; wa.textContent = "TRY AGAIN"; });
+      };
+      card.insertBefore(wa, card.querySelector("#cShop"));
+    }
     card.querySelector("#cShop").onclick = function () {
       window.location.href = d.code ? "/discount/" + encodeURIComponent(d.code) + "?redirect=" + shopUrl() : shopUrl();
     };

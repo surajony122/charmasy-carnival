@@ -3,11 +3,12 @@ import { json } from "@remix-run/node";
 import prisma from "../db.server";
 import { existsSync, readFileSync } from "node:fs";
 import { buildPage } from "../carnival-page";
+import { notifyOmnisend, omnisendConfigured, resolveKey } from "../carnival/omnisend.server";
 import {
   GAME_NAMES, activeGameFor, getSettings, loadGame, openPrizes, rollOutcome, prizeForPlay, withLock,
 } from "../carnival/rules.server";
 import {
-  maskEmail, normalizePhone, resolveOrder, upsertCustomer, saveWinToCustomer, createCustomerCode, addFreeProductToOrder,
+  maskEmail, normalizePhone, resolveOrder, upsertCustomer, saveWinToCustomer, createCustomerCode, addFreeProductToOrder, packGiftWithOrder,
 } from "../carnival/shopify-ops.server";
 
 // The build step combines the game files into one file; fall back to the separate files if it is missing.
@@ -173,7 +174,7 @@ async function handleResult(ctx, fd) {
 function claimView(row, extra = {}) {
   return {
     ok: true, success: true, prizeLabel: row.prizeLabel, delivery: row.delivery, code: row.couponCode || null,
-    note: row.deliveryNote || "", email: row.email, unique: !!(row.couponCode && row.couponCode.startsWith("CHM-")), ...extra,
+    note: row.deliveryNote || "", email: row.email, notified: row.omnisendStatus === "sent", unique: !!(row.couponCode && row.couponCode.startsWith("CHM-")), ...extra,
   };
 }
 
@@ -230,6 +231,12 @@ async function handleClaim(ctx, fd) {
       if (r.ok) { delivery = "order_edit"; note = `Added to order ${order.name}`; }
       else { editError = `Shopify refused to add it to order ${order.name}: ${r.error}`; console.error("Order edit failed, falling back to a product code:", r.error); }
     }
+    // Shopify would not edit the order: tag it and leave a "pack this gift" note for the team (unless the owner prefers a code)
+    if (!delivery && order?.gid && !order.cancelled && settings.giftFallback !== "code") {
+      const pk = await packGiftWithOrder(admin, order, prize.variantId, prize.productTitle);
+      if (pk.ok) { delivery = "pack"; note = `Your free gift will be packed with your order ${order.name}.`; }
+      else editError += ` (and the pack-with-order note failed too: ${pk.error})`;
+    }
     if (!delivery) {
       code = makeCode();
       const r = await createCustomerCode(admin, { code, kind: "FREE_PRODUCT", customerGid, days, variantId: prize.variantId });
@@ -260,7 +267,22 @@ async function handleClaim(ctx, fd) {
   await saveWinToCustomer(admin, customerGid, { game: row.gameId, prize: row.prizeLabel, code, delivery, order: order?.name || playRef, wonAt: new Date().toISOString() });
 
   row = await prisma.gamePlay.findUnique({ where: { orderId: playRef } });
-  return claimView(row, { unique, days });
+  // Omnisend: in "auto" mode every real win is sent on its own (never blocks or fails the customer's claim)
+  if (!adminTest && omnisendConfigured(settings) && (settings.omnisendMode || "auto") === "auto") {
+    notifyOmnisend(row, { days, whatsappConsent: false, key: resolveKey(settings) }).catch(() => {});
+  }
+  return claimView(row, { unique, days, notifyBtn: !adminTest && omnisendConfigured(settings) && settings.omnisendMode === "button" });
+}
+
+// "Send my code on WhatsApp" button: the tap is the customer's consent.
+async function handleNotify(ctx, fd) {
+  const { shop, settings, adminTest } = ctx;
+  if (adminTest || !omnisendConfigured(settings) || settings.omnisendMode !== "button") return fail("off", "This isn't available right now.");
+  const row = await prisma.gamePlay.findUnique({ where: { orderId: clean(fd.get("orderId"), 80) } });
+  if (!row || row.shop !== shop || !row.won || !row.delivery || row.delivery === "pending") return fail("not_won", "We couldn't find your prize.");
+  if (row.omnisendStatus === "sent") return { ok: true, success: true, notified: true };
+  const r = await notifyOmnisend(row, { days: settings.couponDays || 7, whatsappConsent: true, key: resolveKey(settings) });
+  return r.ok ? { ok: true, success: true, notified: true } : fail("send_failed", "We couldn't send it just now. Please copy your code from this screen.");
 }
 
 export const action = async ({ request }) => {
@@ -271,10 +293,11 @@ export const action = async ({ request }) => {
       return json(fail("rate", "Too many attempts. Please wait a minute and try again."));
     }
     const ctx = await context(request);
-    if (!ctx.shop && (intent === "play" || intent === "result" || intent === "claim")) return json(fail("unverified", UNVERIFIED));
+    if (!ctx.shop && (intent === "play" || intent === "result" || intent === "claim" || intent === "notify")) return json(fail("unverified", UNVERIFIED));
     if (intent === "play") return json(await handlePlay(ctx, fd));
     if (intent === "result") return json(await handleResult(ctx, fd));
     if (intent === "claim") return json(await handleClaim(ctx, fd));
+    if (intent === "notify") return json(await handleNotify(ctx, fd));
     return json(fail("bad_request", "Unknown request."));
   } catch (err) {
     console.error("Carnival action error:", err);

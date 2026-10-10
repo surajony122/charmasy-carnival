@@ -9,6 +9,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { GAME_NAMES, SKILL_GAMES } from "../carnival/constants";
 import { loadGame, getSettings } from "../carnival/rules.server";
+import { encryptKey, omnisendConfigured, keyHint } from "../carnival/omnisend.server";
 
 const KINDS = [
   { label: "% OFF coupon", value: "PERCENT" },
@@ -32,7 +33,7 @@ export const loader = async ({ request }) => {
       })),
     };
   }
-  return json({ games, couponDays: settings.couponDays ?? 7, requireOrder: settings.requireOrder !== false, freeGiftDailyLimit: settings.freeGiftDailyLimit ?? 6, spreadFreeGifts: settings.spreadFreeGifts !== false });
+  return json({ games, couponDays: settings.couponDays ?? 7, requireOrder: settings.requireOrder !== false, freeGiftDailyLimit: settings.freeGiftDailyLimit ?? 6, spreadFreeGifts: settings.spreadFreeGifts !== false, giftFallback: settings.giftFallback === "code" ? "code" : "pack", omnisendMode: ["off", "button"].includes(settings.omnisendMode) ? settings.omnisendMode : "auto", omnisendKey: omnisendConfigured(settings), omnisendKeyHint: keyHint(settings) });
 };
 
 const int = (v, min, max, fallback) => {
@@ -52,9 +53,13 @@ export const action = async ({ request }) => {
   const ops = [];
   ops.push(prisma.gameSettings.upsert({
     where: { shop },
-    update: { couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6), spreadFreeGifts: !!data.spreadFreeGifts },
-    create: { shop, couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6), spreadFreeGifts: !!data.spreadFreeGifts, testMode: false },
+    update: { couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6), spreadFreeGifts: !!data.spreadFreeGifts, giftFallback: data.giftFallback === "code" ? "code" : "pack", omnisendMode: ["off", "button"].includes(data.omnisendMode) ? data.omnisendMode : "auto" },
+    create: { shop, couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6), spreadFreeGifts: !!data.spreadFreeGifts, giftFallback: data.giftFallback === "code" ? "code" : "pack", omnisendMode: ["off", "button"].includes(data.omnisendMode) ? data.omnisendMode : "auto", testMode: false },
   }));
+  // Omnisend API key: saved encrypted, only when a new one is typed (empty box keeps the saved key); "remove" clears it
+  const newKey = String(data.omnisendKey || "").trim();
+  if (data.omnisendRemoveKey) ops.push(prisma.gameSettings.update({ where: { shop }, data: { omnisendKeyEnc: null } }));
+  else if (newKey) ops.push(prisma.gameSettings.update({ where: { shop }, data: { omnisendKeyEnc: encryptKey(newKey) } }));
 
   for (let id = 1; id <= 9; id++) {
     const g = data.games?.[id];
@@ -108,6 +113,10 @@ export default function GamesAndPrizes() {
   const [requireOrder, setRequireOrder] = useState(data.requireOrder);
   const [freeLimit, setFreeLimit] = useState(String(data.freeGiftDailyLimit));
   const [spreadFree, setSpreadFree] = useState(data.spreadFreeGifts);
+  const [giftFallback, setGiftFallback] = useState(data.giftFallback);
+  const [omniMode, setOmniMode] = useState(data.omnisendMode);
+  const [omniKey, setOmniKey] = useState("");
+  const [omniRemove, setOmniRemove] = useState(false);
 
   const setGame = useCallback((id, patch) => setGames((g) => ({ ...g, [id]: { ...g[id], ...patch } })), []);
   const setPrize = useCallback((id, k, patch) => setGames((g) => ({
@@ -142,7 +151,7 @@ export default function GamesAndPrizes() {
   });
 
   const save = () => {
-    const payload = { couponDays, requireOrder, freeGiftDailyLimit: freeLimit, spreadFreeGifts: spreadFree, games: {} };
+    const payload = { couponDays, requireOrder, freeGiftDailyLimit: freeLimit, spreadFreeGifts: spreadFree, giftFallback, omnisendMode: omniMode, omnisendKey: omniKey, omnisendRemoveKey: omniRemove, games: {} };
     for (const id of Object.keys(games)) payload.games[id] = { ...games[id], prizes: games[id].prizes.map(({ _k, ...p }) => p) };
     const fd = new FormData();
     fd.append("payload", JSON.stringify(payload));
@@ -181,6 +190,31 @@ export default function GamesAndPrizes() {
                       helpText="Once this many free products are given today, games only give coupons until tomorrow." />
                   </div>
                 </InlineStack>
+                <div style={{ maxWidth: 560 }}>
+                  <Select
+                    label="If a free product cannot be added to the customer's order"
+                    helpText="Shopify does not allow editing orders created by some outside checkouts (for example Shiprocket). Then: tag the order 'carnival-free-gift' and add a 'please pack this gift' note, or give the customer a personal 100%-off code for the product."
+                    options={[{ label: "Pack it with the order (tag + note on the order)", value: "pack" }, { label: "Give a personal 100%-off code", value: "code" }]}
+                    value={giftFallback} onChange={setGiftFallback}
+                  />
+                </div>
+                <div style={{ maxWidth: 560 }}>
+                  <TextField
+                    label="Omnisend API key"
+                    type="password" autoComplete="off" value={omniKey} onChange={(v) => { setOmniKey(v); setOmniRemove(false); }}
+                    placeholder={data.omnisendKey ? "Saved (" + data.omnisendKeyHint + ") - type a new key only to replace it" : "Paste your Omnisend API key"}
+                    helpText="Create it in Omnisend: Store settings > API > Create API key. It is saved encrypted and never shown again."
+                  />
+                  {data.omnisendKey ? <Checkbox label="Remove the saved key" checked={omniRemove} onChange={(v) => { setOmniRemove(v); if (v) setOmniKey(""); }} /> : null}
+                </div>
+                <div style={{ maxWidth: 560 }}>
+                  <Select
+                    label="Send wins to Omnisend (WhatsApp / email)"
+                    helpText={data.omnisendKey ? "Sends a 'carnival_win' event with the coupon code, so your Omnisend automation can message the customer. 'Button' = the customer taps 'Send my code on WhatsApp' (their consent)." : "Not connected yet: paste your Omnisend API key above and Save."}
+                    options={[{ label: "Automatically for every win", value: "auto" }, { label: "Only when the customer taps a button", value: "button" }, { label: "Off", value: "off" }]}
+                    value={omniMode} onChange={setOmniMode}
+                  />
+                </div>
                 <Checkbox
                   label="Spread the free gifts through the day"
                   helpText="On: the day's free gifts are released gradually (for 6 gifts, one every 4 hours), so they do not all go in the first hour. Customers are never told how many there are."

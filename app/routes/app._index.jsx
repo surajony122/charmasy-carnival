@@ -68,7 +68,7 @@ export const loader = async ({ request }) => {
     }),
   ]);
 
-  const settings = settingsRecord || { testMode: false, activeGameId: 1, manualActive: false };
+  const { omnisendKeyEnc, ...settings } = settingsRecord || { testMode: false, activeGameId: 1, manualActive: false };   // never send the saved key to the browser
 
   return json({ plays, settings, storage: storageStatus() });
 };
@@ -137,7 +137,9 @@ export default function Index() {
         </IndexTable.Cell>
         <IndexTable.Cell>{play.prizeLabel || play.prizeValue || "-"}</IndexTable.Cell>
         <IndexTable.Cell>
-          {play.delivery === "order_edit" ? "Added to order" : play.couponCode || (play.won ? "Not claimed" : "-")}
+          {play.delivery === "order_edit" ? "Added to order" : play.delivery === "pack" ? "Pack with order" : play.couponCode || (play.won ? "Not claimed" : "-")}
+          {play.omnisendStatus === "sent" ? <Text as="p" variant="bodySm" tone="subdued">Sent to Omnisend</Text> : null}
+          {play.omnisendStatus === "failed" ? <Text as="p" variant="bodySm" tone="critical">⚠ Omnisend: {play.omnisendError}</Text> : null}
           {play.deliveryNote ? <Text as="p" variant="bodySm" tone="subdued">{play.deliveryNote}</Text> : null}
           {play.deliveryError ? <Text as="p" variant="bodySm" tone="critical">⚠ {play.deliveryError}</Text> : null}
         </IndexTable.Cell>

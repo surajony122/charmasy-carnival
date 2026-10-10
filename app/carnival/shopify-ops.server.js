@@ -41,9 +41,9 @@ export function normalizePhone(raw) {
 // orderRef is what the thank-you button sends: the numeric order id (or, as a fallback, the order number).
 export async function resolveOrder(admin, orderRef) {
   if (!admin || !orderRef) return null;
-  const base = "id name email createdAt cancelledAt displayFulfillmentStatus customer { id email }";
+  const base = "id name email note tags createdAt cancelledAt displayFulfillmentStatus customer { id email }";
   // phone numbers are protected customer data: ask for them first, but never lose the order if that is refused
-  const rich = "id name email phone createdAt cancelledAt displayFulfillmentStatus customer { id email phone } shippingAddress { phone } billingAddress { phone }";
+  const rich = "id name email phone note tags createdAt cancelledAt displayFulfillmentStatus customer { id email phone } shippingAddress { phone } billingAddress { phone }";
   for (const fields of [rich, base]) {
     try {
       if (/^\d{5,}$/.test(orderRef)) {
@@ -65,7 +65,7 @@ function shape(o) {
   return {
     gid: o.id, name: o.name, email: (o.email || o.customer?.email || "").toLowerCase(),
     customerGid: o.customer?.id || null, createdAt: o.createdAt, cancelled: !!o.cancelledAt,
-    fulfillment: o.displayFulfillmentStatus,
+    fulfillment: o.displayFulfillmentStatus, note: o.note || "", tags: Array.isArray(o.tags) ? o.tags : [],
     phone: o.phone || o.customer?.phone || o.shippingAddress?.phone || o.billingAddress?.phone || "",
   };
 }
@@ -175,6 +175,31 @@ export async function addFreeProductToOrder(admin, orderGid, variantId) {
     return { ok: false, error: commit?.data?.orderEditCommit?.userErrors?.[0]?.message || "commit failed" };
   } catch (e) {
     console.error("addFreeProductToOrder error:", e);
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+// For orders Shopify will not let anyone edit (for example orders created by an outside checkout such as Shiprocket):
+// tag the order and add a clear "please pack this free gift" line to its note, so the team packs it in the same parcel.
+export async function packGiftWithOrder(admin, order, variantId, fallbackTitle) {
+  if (!admin || !order?.gid) return { ok: false, error: "no order" };
+  try {
+    let label = fallbackTitle || "free gift";
+    try {
+      const v = await gql(admin, `#graphql\nquery v($id: ID!) { productVariant(id: $id) { sku title product { title } } }`, { id: variantId });
+      const pv = v?.data?.productVariant;
+      if (pv) label = `${pv.product?.title || fallbackTitle || "free gift"}${pv.title && pv.title !== "Default Title" ? " - " + pv.title : ""}${pv.sku ? " (SKU " + pv.sku + ")" : ""}`;
+    } catch (e) {}
+    const line = `CARNIVAL FREE GIFT - please pack with this order: ${label}`;
+    const note = order.note && order.note.includes("CARNIVAL FREE GIFT") ? order.note : [order.note, line].filter(Boolean).join("\n");
+    const tags = Array.from(new Set([...(order.tags || []), "carnival-free-gift"]));
+    const d = await gql(admin,
+      `#graphql\nmutation u($input: OrderInput!) { orderUpdate(input: $input) { order { id } userErrors { message } } }`,
+      { input: { id: order.gid, note, tags } });
+    const r = d?.data?.orderUpdate;
+    if (r?.order?.id) return { ok: true, label };
+    return { ok: false, error: r?.userErrors?.[0]?.message || JSON.stringify(d?.errors || "update failed") };
+  } catch (e) {
     return { ok: false, error: String(e.message || e) };
   }
 }

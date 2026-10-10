@@ -56,6 +56,8 @@ model GamePlay {
   finishedAt  DateTime?
   delivery    String?   // code | order_edit | product_code
   deliveryNote String?
+  omnisendStatus String?
+  omnisendError String?
   deliveryError String?  // admin-only: why a free product could not be added to the order
 }
 
@@ -68,7 +70,10 @@ model GameSettings {
   couponDays   Int     @default(7)   // how long a won coupon stays valid
   requireOrder Boolean @default(true) // a play needs a real order
   freeGiftDailyLimit Int @default(6)  // free products handed out per day, all games together
-  spreadFreeGifts Boolean @default(true) // release the free gifts through the day instead of all at midnight (one play per order)
+  spreadFreeGifts Boolean @default(true) // release the free gifts through the day instead of all at midnight
+  omnisendKeyEnc String?                 // the Omnisend API key, encrypted (AES-256-GCM)
+  omnisendMode String @default("auto")   // "off" | "auto" (send every win to Omnisend) | "button" (customer taps "Send to my WhatsApp")
+  giftFallback String @default("pack")  // when a free product cannot be added to the order: "pack" = tag + note on the order, "code" = personal 100% code (one play per order)
 }
 
 // Per-game rules edited on the app's "Games & prizes" page.

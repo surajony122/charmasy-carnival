@@ -92,3 +92,9 @@ _Last updated: 2026-10-05. Campaign: 12–20 Oct 2026, one game per day._
 ## Still open
 - Emailing the code (not built; code is shown on screen and saved on the customer profile).
 - Real store install is deferred (see project memory).
+
+## Orders that Shopify will not let us edit (Shiprocket etc.)
+Orders made by an outside checkout (e.g. "Shiprocket Checkout via import") return "The order cannot be edited". Then (setting "If a free product cannot be added", default Pack it with the order) the app tags the order `carnival-free-gift` and appends "CARNIVAL FREE GIFT - please pack with this order: <product> (SKU)" to the order note; customer sees "your gift will be packed with your order". Alternative setting: personal 100%-off code. Cancelled orders always get the code. The reason is saved in the plays table (red line).
+
+## Omnisend (WhatsApp / email)
+Set OMNISEND_API_KEY in Render. After each real win the app posts custom event `carnival_win` to Omnisend (properties: coupon_code, prize, expires, game, kind, delivery, order, note, whatsapp_consent). Admin setting "Send wins to Omnisend": Automatically / Only when the customer taps the button (whatsapp_consent=true) / Off. Test Mode never sends. Omnisend decides who may get WhatsApp (its API has only email + sms channels). Result is shown per play in the plays table.

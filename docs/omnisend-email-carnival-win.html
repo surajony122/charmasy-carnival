@@ -1,0 +1,56 @@
+<!-- Charmacy Carnival - "You won" email for Omnisend.
+     Import: Store settings > Saved templates > Import template > Import HTML (or Paste in code).
+     Use it in an automation triggered by the custom event carnival_win (coupon wins: kind = coupon).
+     The [[event.xxx]] tags are filled from the event fields our app sends. Check them with Dynamic Preview. -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffe3ee;margin:0;padding:0;">
+  <tr>
+    <td align="center" style="padding:16px 8px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#fff6ec;border-radius:16px;overflow:hidden;border:2px solid #e11d63;">
+        <tr>
+          <td align="center" style="background:#fff6ec;border-bottom:3px solid #e11d63;padding:16px 12px 14px 12px;">
+            <img src="https://charmasy-carnival.onrender.com/carnival/img/logo.png" alt="Charmacy" width="130" style="display:block;border:0;width:130px;max-width:60%;height:auto;">
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:24px 16px 6px 16px;font-family:Arial,Helvetica,sans-serif;">
+            <div style="font-size:46px;line-height:50px;">&#127881;</div>
+            <div style="font-size:26px;line-height:32px;font-weight:bold;color:#a10f4d;margin-top:4px;">You won!</div>
+            <div style="font-size:16px;line-height:24px;color:#4a0f2b;margin-top:8px;">
+              Congratulations! Playing <b>[[event.game]]</b> just won you<br>
+              <span style="font-size:21px;line-height:28px;font-weight:bold;color:#e11d63;">[[event.prize]]</span>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:16px 16px 6px 16px;font-family:Arial,Helvetica,sans-serif;">
+            <div style="font-size:12px;letter-spacing:2px;color:#a10f4d;">YOUR PERSONAL CODE</div>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;width:100%;max-width:340px;">
+              <tr>
+                <td align="center" style="background:#ffffff;border:2px dashed #e11d63;border-radius:12px;padding:14px 8px;font-family:'Courier New',Courier,monospace;font-size:24px;line-height:30px;letter-spacing:2px;font-weight:bold;color:#a10f4d;word-break:break-all;">
+                  [[event.coupon_code]]
+                </td>
+              </tr>
+            </table>
+            <div style="font-size:13px;line-height:20px;color:#4a0f2b;margin-top:10px;">
+              Single use, made just for you. Valid till <b>[[event.expires]]</b>.
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:18px 16px 6px 16px;">
+            <a href="https://charmacyworld.com/discount/[[event.coupon_code]]?redirect=/collections/all" target="_blank" style="display:inline-block;background:#e11d63;color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;text-decoration:none;padding:14px 28px;border-radius:30px;border-bottom:4px solid #a10f4d;">SHOP NOW &rarr;</a>
+            <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#7a3a55;margin-top:12px;">
+              The button applies your code automatically. Or paste it at checkout.
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:16px 16px 24px 16px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:21px;color:#4a0f2b;">
+            A new game opens every day from 12 to 20 October.<br>
+            Place another order and play again for another chance to win!
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
