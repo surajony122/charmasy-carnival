@@ -285,7 +285,7 @@ async function handleClaim(ctx, fd) {
     notifyOmnisend(row, { days, whatsappConsent: false, key: resolveKey(settings) }).catch(() => {});
   }
   // WhatsApp through Bik (real wins only; Test Mode has its own test button in the admin)
-  if (!adminTest && (settings.bikMode || "auto") === "auto") {
+  if ((settings.bikMode || "auto") === "auto") {
     if (!row.phone) {
       prisma.gamePlay.update({ where: { orderId: playRef }, data: { waStatus: "skipped", waError: "No phone number on the order" } }).catch(() => {});
     } else if (prize.kind === "FREE_PRODUCT" && bikReady(settings, "gift")) {
@@ -300,7 +300,7 @@ async function handleClaim(ctx, fd) {
 // What the win screen needs to show the "send it to my WhatsApp" consent block (consent mode only).
 async function waExtras(ctx, playRef) {
   const { shop, settings, adminTest } = ctx;
-  if (adminTest || settings.bikMode !== "consent") return {};
+  if (settings.bikMode !== "consent") return {};
   const row = await prisma.gamePlay.findUnique({ where: { orderId: playRef } });
   if (!row || row.shop !== shop || !row.delivery || row.delivery === "pending") return {};
   const kind = row.prizeKind === "FREE_PRODUCT" ? "gift" : "win";
@@ -312,7 +312,7 @@ async function waExtras(ctx, playRef) {
 // "Send it to my WhatsApp": the customer's tap is their consent to this message and the weekly coupon reminders.
 async function handleWaOptin(ctx, fd) {
   const { shop, settings, adminTest } = ctx;
-  if (adminTest || settings.bikMode !== "consent") return fail("off", "This isn't available right now.");
+  if (settings.bikMode !== "consent") return fail("off", "This isn't available right now.");
   const row = await prisma.gamePlay.findUnique({ where: { orderId: clean(fd.get("orderId"), 80) } });
   if (!row || row.shop !== shop || !row.won || !row.delivery || row.delivery === "pending") return fail("not_won", "We couldn't find your prize.");
   if (row.waStatus === "sent") return { ok: true, success: true, sent: true };

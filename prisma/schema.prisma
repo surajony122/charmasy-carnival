@@ -94,8 +94,32 @@ model GameSettings {
   bikReminderTemplate String?
   bikGiftTemplate String?
   bikMode String @default("auto")        // "off" | "auto" (every win) | "consent" (only when the customer taps "send it to my WhatsApp")
+  bikWebhookKeyEnc String?               // key Bik sends with its status webhooks (encrypted)
   bikReminders Boolean @default(true)    // weekly reminders until the coupon is used or expires
   giftFallback String @default("pack")  // when a free product cannot be added to the order: "pack" = tag + note on the order, "code" = personal 100% code (one play per order)
+}
+
+// One row per WhatsApp message we hand to Bik, updated as Bik reports sent / delivered / read / failed.
+model WhatsAppLog {
+  id          String    @id @default(cuid())
+  shop        String
+  orderId     String?   // the play this message belongs to
+  kind        String    // win | reminder | gift | test
+  phone       String?
+  templateId  String?
+  messageId   String?   // WhatsApp message id (wamid...) returned by Bik
+  status      String    // accepted | sent | delivered | read | failed
+  error       String?
+  createdAt   DateTime  @default(now())
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  readAt      DateTime?
+  failedAt    DateTime?
+  clickedAt   DateTime?
+  optedOutAt  DateTime?
+
+  @@index([messageId])
+  @@index([shop, createdAt])
 }
 
 // Per-game rules edited on the app's "Games & prizes" page.

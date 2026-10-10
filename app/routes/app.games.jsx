@@ -74,6 +74,9 @@ export const action = async ({ request }) => {
     if (!bikCreds(st)) return json({ bikTest: { ok: false, error: "Save your Bik key and secret first, then send the test." } });
     if (!st.bikWinTemplate) return json({ bikTest: { ok: false, error: "Save the win template id first." } });
     const r = await sendTestMessage(st, to);
+    try {
+      await prisma.whatsAppLog.create({ data: { shop, kind: "test", phone: to, templateId: st.bikWinTemplate, messageId: r.id || null, status: r.ok ? "accepted" : "failed", error: r.ok ? null : String(r.error || "").slice(0, 400), failedAt: r.ok ? null : new Date() } });
+    } catch (e) {}
     return json({ bikTest: { ok: r.ok, error: r.error || "", to, id: r.id || "" } });
   }
   let data;

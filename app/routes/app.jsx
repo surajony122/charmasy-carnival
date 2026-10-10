@@ -24,6 +24,7 @@ export default function App() {
         </Link>
         <Link to="/app/games">Games &amp; prizes</Link>
         <Link to="/app/gifts">Free gift winners</Link>
+        <Link to="/app/whatsapp">WhatsApp messages</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>

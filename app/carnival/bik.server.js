@@ -82,6 +82,12 @@ export function deliver(settings, play, msg, { reminder = false, at = null } = {
   return queued(async () => {
     const r = await sendTemplate(bikCreds(settings), msg);
     try {
+      await prisma.whatsAppLog.create({ data: {
+        shop: settings.shop, orderId: play.orderId, kind: (msg.callbackData && msg.callbackData.kind) || (reminder ? "reminder" : "win"), phone: msg.to || null, templateId: msg.templateId || null,
+        messageId: r.id || null, status: r.ok ? "accepted" : "failed", error: r.ok ? null : String(r.error || "").slice(0, 400), failedAt: r.ok ? null : new Date(),
+      } });
+    } catch (e) { console.error("Could not write the WhatsApp log:", e); }
+    try {
       const now = at || new Date();
       await prisma.gamePlay.update({
         where: { orderId: play.orderId },
