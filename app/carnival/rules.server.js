@@ -48,6 +48,27 @@ export function activeGameFor(settings, now = Date.now()) {
   return 0;
 }
 
+// The window in which a won personal code can be used. Default for this campaign: from 21 Oct 2026 00:00 IST for 30 days
+// (until the end of 19 Nov). Test Mode codes work immediately so they can be tried before the campaign.
+export const DEFAULT_COUPON_START = new Date(Date.UTC(2026, 9, 21) - 5.5 * 3600 * 1000);
+export const DEFAULT_COUPON_END = new Date(Date.UTC(2026, 10, 20) - 5.5 * 3600 * 1000);
+export function couponWindow(settings, { testMode = false, now = Date.now() } = {}) {
+  const planned = settings && settings.couponStartsAt ? new Date(settings.couponStartsAt) : DEFAULT_COUPON_START;
+  const startsAt = testMode ? new Date(now) : new Date(Math.max(planned.getTime(), now - 60000));
+  let endsAt = settings && settings.couponEndsAt ? new Date(settings.couponEndsAt) : DEFAULT_COUPON_END;
+  if (endsAt.getTime() <= startsAt.getTime() + 24 * 3600 * 1000) {      // the campaign window is over: fall back to "valid for X days"
+    endsAt = new Date(startsAt.getTime() + ((settings && settings.couponDays) || 7) * 86400000);
+  }
+  return { startsAt, endsAt };
+}
+// "19 Nov 2026" - the last day the code works (the window ends at 00:00 IST of the next day)
+export function lastDayText(endsAt) {
+  return new Date(endsAt.getTime() - 1000 + 5.5 * 3600 * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}
+export function startDayText(startsAt) {
+  return new Date(startsAt.getTime() + 5.5 * 3600 * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+}
+
 export async function getSettings(shop) {
   let st = null;
   try {

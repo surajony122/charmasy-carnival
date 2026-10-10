@@ -68,7 +68,7 @@ export const loader = async ({ request }) => {
     }),
   ]);
 
-  const { omnisendKeyEnc, ...settings } = settingsRecord || { testMode: false, activeGameId: 1, manualActive: false };   // never send the saved key to the browser
+  const { omnisendKeyEnc, bikKeyEnc, ...settings } = settingsRecord || { testMode: false, activeGameId: 1, manualActive: false };   // never send the saved key to the browser
 
   return json({ plays, settings, storage: storageStatus() });
 };
@@ -138,6 +138,9 @@ export default function Index() {
         <IndexTable.Cell>{play.prizeLabel || play.prizeValue || "-"}</IndexTable.Cell>
         <IndexTable.Cell>
           {play.delivery === "order_edit" ? "Added to order" : play.delivery === "pack" ? "Pack with order" : play.couponCode || (play.won ? "Not claimed" : "-")}
+          {play.waStatus === "sent" ? <Text as="p" variant="bodySm" tone="subdued">WhatsApp sent{play.waReminders ? ` · ${play.waReminders} reminder${play.waReminders > 1 ? "s" : ""}` : ""}{play.couponUsedAt ? " · coupon used" : ""}</Text> : null}
+          {play.waStatus === "skipped" ? <Text as="p" variant="bodySm" tone="subdued">WhatsApp skipped: {play.waError}</Text> : null}
+          {play.waError && play.waStatus !== "skipped" ? <Text as="p" variant="bodySm" tone="critical">⚠ WhatsApp: {play.waError}</Text> : null}
           {play.omnisendStatus === "sent" ? <Text as="p" variant="bodySm" tone="subdued">Sent to Omnisend</Text> : null}
           {play.omnisendStatus === "failed" ? <Text as="p" variant="bodySm" tone="critical">⚠ Omnisend: {play.omnisendError}</Text> : null}
           {play.deliveryNote ? <Text as="p" variant="bodySm" tone="subdued">{play.deliveryNote}</Text> : null}

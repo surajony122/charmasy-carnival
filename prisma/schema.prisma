@@ -59,6 +59,19 @@ model GamePlay {
   omnisendStatus String?
   omnisendError String?
   deliveryError String?  // admin-only: why a free product could not be added to the order
+  couponStartsAt DateTime?  // when the personal code becomes usable / stops being usable
+  couponEndsAt DateTime?
+  couponUsedAt DateTime?    // set when a reminder check finds the code was redeemed
+  giftToken   String?   // secret part of the "view my gift" link (random, 16 characters)
+  orderStatusUrl String?  // the customer-facing status page of the order
+  orderName   String?     // e.g. #313906
+  waStatus    String?   // sent | failed | skipped
+  waError     String?
+  waSentAt    DateTime?
+  waReminders Int       @default(0)
+  waLastAt    DateTime? // last WhatsApp message (win or reminder)
+
+  @@index([giftToken])
 }
 
 model GameSettings {
@@ -73,6 +86,14 @@ model GameSettings {
   spreadFreeGifts Boolean @default(true) // release the free gifts through the day instead of all at midnight
   omnisendKeyEnc String?                 // the Omnisend API key, encrypted (AES-256-GCM)
   omnisendMode String @default("auto")   // "off" | "auto" (send every win to Omnisend) | "button" (customer taps "Send to my WhatsApp")
+  couponStartsAt DateTime?               // personal codes become usable from here (null = the campaign default, 21 Oct 2026 00:00 IST)
+  couponEndsAt DateTime?                 // ... and stop here (null = the campaign default, 20 Nov 2026 00:00 IST)
+  bikKeyEnc String?                      // Bik app key + secret (JSON), encrypted
+  bikWinTemplate String?                 // Bik template ids
+  bikReminderTemplate String?
+  bikGiftTemplate String?
+  bikMode String @default("auto")        // "off" | "auto"
+  bikReminders Boolean @default(true)    // weekly reminders until the coupon is used or expires
   giftFallback String @default("pack")  // when a free product cannot be added to the order: "pack" = tag + note on the order, "code" = personal 100% code (one play per order)
 }
 

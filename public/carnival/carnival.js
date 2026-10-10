@@ -509,10 +509,10 @@
       card.innerHTML =
         '<div class="ov-icon">🎉</div><div class="ov-title">Your code</div>' +
         '<div class="ov-msg">' + esc(label) + ' is saved for <b>' + esc(d.email || PLAYER_EMAIL) + '</b>.' +
-        (isProduct ? " " + esc(d.note || "") : (d.unique ? " Single-use, valid for " + (d.days || 7) + " days." : "")) + '</div>' +
+        (isProduct ? " " + esc(d.note || "") : "") + (d.unique ? " Single-use. " + (d.validTill ? (d.activeFrom ? "It starts working on <b>" + esc(d.activeFrom) + "</b> and is valid till <b>" + esc(d.validTill) + "</b>." : "Valid till <b>" + esc(d.validTill) + "</b>.") : "Valid for " + (d.days || 7) + " days.") : "") + '</div>' +
         codeBox(d.code) +
         '<button class="btn3d gold" id="cShop">SHOP NOW →</button>' +
-        '<div class="fine">Paste the code at checkout. Copy it now — you will need it.</div>' + nextTimerHtml();
+        '<div class="fine">' + (d.activeFrom ? 'Copy it now. It is ready to use from ' + esc(d.activeFrom) + '.' : 'Paste the code at checkout. Copy it now — you will need it.') + '</div>' + nextTimerHtml();
       card.querySelector("#cCopy").onclick = function () { copyText(d.code, this); };
     }
     tickClocks();
@@ -531,7 +531,7 @@
       card.insertBefore(wa, card.querySelector("#cShop"));
     }
     card.querySelector("#cShop").onclick = function () {
-      window.location.href = d.code ? "/discount/" + encodeURIComponent(d.code) + "?redirect=" + shopUrl() : shopUrl();
+      window.location.href = d.code && !d.activeFrom ? "/discount/" + encodeURIComponent(d.code) + "?redirect=" + shopUrl() : shopUrl();
     };
   }
 

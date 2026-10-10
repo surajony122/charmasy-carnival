@@ -41,9 +41,9 @@ export function normalizePhone(raw) {
 // orderRef is what the thank-you button sends: the numeric order id (or, as a fallback, the order number).
 export async function resolveOrder(admin, orderRef) {
   if (!admin || !orderRef) return null;
-  const base = "id name email note tags createdAt cancelledAt displayFulfillmentStatus customer { id email }";
+  const base = "id name email note tags createdAt cancelledAt displayFulfillmentStatus statusPageUrl customer { id email }";
   // phone numbers are protected customer data: ask for them first, but never lose the order if that is refused
-  const rich = "id name email phone note tags createdAt cancelledAt displayFulfillmentStatus customer { id email phone } shippingAddress { phone } billingAddress { phone }";
+  const rich = "id name email phone note tags createdAt cancelledAt displayFulfillmentStatus statusPageUrl customer { id email phone firstName } shippingAddress { phone firstName } billingAddress { phone }";
   for (const fields of [rich, base]) {
     try {
       if (/^\d{5,}$/.test(orderRef)) {
@@ -67,6 +67,8 @@ function shape(o) {
     customerGid: o.customer?.id || null, createdAt: o.createdAt, cancelled: !!o.cancelledAt,
     fulfillment: o.displayFulfillmentStatus, note: o.note || "", tags: Array.isArray(o.tags) ? o.tags : [],
     phone: o.phone || o.customer?.phone || o.shippingAddress?.phone || o.billingAddress?.phone || "",
+    firstName: o.customer?.firstName || o.shippingAddress?.firstName || "",
+    statusUrl: o.statusPageUrl || "",
   };
 }
 
@@ -116,7 +118,8 @@ export async function saveWinToCustomer(admin, customerGid, info) {
 }
 
 // Single-use discount code locked to one customer. `items`: "all" or a variant id (for the free-product fallback).
-export async function createCustomerCode(admin, { code, kind, value, customerGid, days, variantId }) {
+// startsAt / endsAt are Dates (the coupon window); "days" is only the fallback when no window is given.
+export async function createCustomerCode(admin, { code, kind, value, customerGid, days, variantId, startsAt, endsAt }) {
   if (!admin) return { ok: false, error: "no admin session" };
   try {
     const gets = {
@@ -129,12 +132,13 @@ export async function createCustomerCode(admin, { code, kind, value, customerGid
         input: {
           title: "Carnival " + code,
           code,
-          startsAt: new Date().toISOString(),
-          endsAt: new Date(Date.now() + days * 24 * 3600 * 1000).toISOString(),
+          startsAt: (startsAt || new Date()).toISOString(),
+          endsAt: (endsAt || new Date(Date.now() + (days || 7) * 24 * 3600 * 1000)).toISOString(),
           usageLimit: 1,
           appliesOncePerCustomer: true,
           customerSelection: customerGid ? { customers: { add: [customerGid] } } : { all: true },
-          combinesWith: { orderDiscounts: false, productDiscounts: false, shippingDiscounts: false },
+          // stacks with the store's automatic discount (which must allow combining too) and with shipping offers
+          combinesWith: { orderDiscounts: true, productDiscounts: true, shippingDiscounts: true },
           customerGets: gets,
         },
       });
@@ -201,5 +205,21 @@ export async function packGiftWithOrder(admin, order, variantId, fallbackTitle) 
     return { ok: false, error: r?.userErrors?.[0]?.message || JSON.stringify(d?.errors || "update failed") };
   } catch (e) {
     return { ok: false, error: String(e.message || e) };
+  }
+}
+
+// Has this personal code been redeemed? { ok, used, expired } (ok is false when Shopify could not tell us)
+export async function codeUsage(admin, code) {
+  if (!admin || !code) return { ok: false };
+  try {
+    const d = await gql(admin,
+      `#graphql\nquery u($c: String!) { codeDiscountNodeByCode(code: $c) { id codeDiscount { ... on DiscountCodeBasic { asyncUsageCount status endsAt } } } }`,
+      { c: code });
+    const node = d?.data?.codeDiscountNodeByCode;
+    if (!node) return d?.errors ? { ok: false } : { ok: true, gone: true };   // no such code any more: nothing left to remind about
+    const cd = node.codeDiscount || {};
+    return { ok: true, used: (cd.asyncUsageCount || 0) > 0, expired: cd.status === "EXPIRED" };
+  } catch (e) {
+    return { ok: false };
   }
 }

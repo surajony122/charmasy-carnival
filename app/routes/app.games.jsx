@@ -11,6 +11,13 @@ import { GAME_NAMES, SKILL_GAMES } from "../carnival/constants";
 import { loadGame, getSettings } from "../carnival/rules.server";
 import { normalizePhone } from "../carnival/shopify-ops.server";
 import { encryptKey, omnisendConfigured, keyHint, resolveKey, sendTestEvent } from "../carnival/omnisend.server";
+import { bikCreds, bikHint, encryptCreds, sendTestMessage } from "../carnival/bik.server";
+import { DEFAULT_COUPON_START, DEFAULT_COUPON_END } from "../carnival/rules.server";
+
+// India-time day <-> Date helpers for the coupon dates (a day is 00:00 IST to 00:00 IST)
+const istDay = (d) => new Date(d.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+const dayStart = (ymd) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || "")); return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]) - 5.5 * 3600 * 1000) : null; };
+const cleanId = (v) => String(v || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80) || null;
 
 const KINDS = [
   { label: "% OFF coupon", value: "PERCENT" },
@@ -34,7 +41,11 @@ export const loader = async ({ request }) => {
       })),
     };
   }
-  return json({ games, couponDays: settings.couponDays ?? 7, requireOrder: settings.requireOrder !== false, freeGiftDailyLimit: settings.freeGiftDailyLimit ?? 6, spreadFreeGifts: settings.spreadFreeGifts !== false, giftFallback: settings.giftFallback === "code" ? "code" : "pack", omnisendMode: ["off", "button"].includes(settings.omnisendMode) ? settings.omnisendMode : "auto", omnisendKey: omnisendConfigured(settings), omnisendKeyHint: keyHint(settings) });
+  return json({ games, couponDays: settings.couponDays ?? 7, requireOrder: settings.requireOrder !== false, freeGiftDailyLimit: settings.freeGiftDailyLimit ?? 6, spreadFreeGifts: settings.spreadFreeGifts !== false, giftFallback: settings.giftFallback === "code" ? "code" : "pack", omnisendMode: ["off", "button"].includes(settings.omnisendMode) ? settings.omnisendMode : "auto", omnisendKey: omnisendConfigured(settings), omnisendKeyHint: keyHint(settings),
+    couponFrom: istDay(settings.couponStartsAt ? new Date(settings.couponStartsAt) : DEFAULT_COUPON_START),
+    couponLast: istDay(new Date((settings.couponEndsAt ? new Date(settings.couponEndsAt) : DEFAULT_COUPON_END).getTime() - 1000)),
+    bikKey: !!bikCreds(settings), bikHint: bikHint(settings), bikMode: settings.bikMode === "off" ? "off" : "auto", bikReminders: settings.bikReminders !== false,
+    bikWinTemplate: settings.bikWinTemplate || "", bikReminderTemplate: settings.bikReminderTemplate || "", bikGiftTemplate: settings.bikGiftTemplate || "" });
 };
 
 const int = (v, min, max, fallback) => {
@@ -56,6 +67,15 @@ export const action = async ({ request }) => {
     const r = await sendTestEvent(key, email, phone);
     return json({ omnisendTest: { ok: r.ok, error: r.error || "", email } });
   }
+  if (fd.get("bikTest")) {
+    const to = normalizePhone(String(fd.get("bikTest")));
+    if (!to) return json({ bikTest: { ok: false, error: "Type a valid mobile number first (with +91 for India)." } });
+    const st = await getSettings(shop);
+    if (!bikCreds(st)) return json({ bikTest: { ok: false, error: "Save your Bik key and secret first, then send the test." } });
+    if (!st.bikWinTemplate) return json({ bikTest: { ok: false, error: "Save the win template id first." } });
+    const r = await sendTestMessage(st, to);
+    return json({ bikTest: { ok: r.ok, error: r.error || "", to } });
+  }
   let data;
   try { data = JSON.parse(String(fd.get("payload") || "{}")); } catch { return json({ ok: false, error: "Could not read the form." }); }
 
@@ -66,6 +86,15 @@ export const action = async ({ request }) => {
     update: { couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6), spreadFreeGifts: !!data.spreadFreeGifts, giftFallback: data.giftFallback === "code" ? "code" : "pack", omnisendMode: ["off", "button"].includes(data.omnisendMode) ? data.omnisendMode : "auto" },
     create: { shop, couponDays: int(data.couponDays, 1, 90, 7), requireOrder: !!data.requireOrder, freeGiftDailyLimit: int(data.freeGiftDailyLimit, 0, 100000, 6), spreadFreeGifts: !!data.spreadFreeGifts, giftFallback: data.giftFallback === "code" ? "code" : "pack", omnisendMode: ["off", "button"].includes(data.omnisendMode) ? data.omnisendMode : "auto", testMode: false },
   }));
+  // Coupon dates (India time): codes work from the start day 00:00 until the end of the last day
+  const from = dayStart(data.couponFrom), last = dayStart(data.couponLast);
+  const dates = { couponStartsAt: from, couponEndsAt: last ? new Date(last.getTime() + 24 * 3600 * 1000) : null };
+  ops.push(prisma.gameSettings.update({ where: { shop }, data: dates }));
+  // Bik (WhatsApp): key + secret are replaced only when both are typed; template ids and switches always
+  const bikData = { bikMode: data.bikMode === "off" ? "off" : "auto", bikReminders: !!data.bikReminders, bikWinTemplate: cleanId(data.bikWinTemplate), bikReminderTemplate: cleanId(data.bikReminderTemplate), bikGiftTemplate: cleanId(data.bikGiftTemplate) };
+  if (data.bikRemoveKey) bikData.bikKeyEnc = null;
+  else if (String(data.bikKey || "").trim() && String(data.bikSecret || "").trim()) bikData.bikKeyEnc = encryptCreds(data.bikKey, data.bikSecret);
+  ops.push(prisma.gameSettings.update({ where: { shop }, data: bikData }));
   // Omnisend API key: saved encrypted, only when a new one is typed (empty box keeps the saved key); "remove" clears it
   const newKey = String(data.omnisendKey || "").trim();
   if (data.omnisendRemoveKey) ops.push(prisma.gameSettings.update({ where: { shop }, data: { omnisendKeyEnc: null } }));
@@ -127,6 +156,18 @@ export default function GamesAndPrizes() {
   const [omniMode, setOmniMode] = useState(data.omnisendMode);
   const [omniKey, setOmniKey] = useState("");
   const [omniRemove, setOmniRemove] = useState(false);
+  const [couponFrom, setCouponFrom] = useState(data.couponFrom);
+  const [couponLast, setCouponLast] = useState(data.couponLast);
+  const [bikKey, setBikKey] = useState("");
+  const [bikSecret, setBikSecret] = useState("");
+  const [bikRemove, setBikRemove] = useState(false);
+  const [bikMode, setBikMode] = useState(data.bikMode);
+  const [bikReminders, setBikReminders] = useState(data.bikReminders);
+  const [bikWin, setBikWin] = useState(data.bikWinTemplate);
+  const [bikRem, setBikRem] = useState(data.bikReminderTemplate);
+  const [bikGift, setBikGift] = useState(data.bikGiftTemplate);
+  const [bikPhone, setBikPhone] = useState("");
+  const sendBikTest = () => { const fd = new FormData(); fd.append("bikTest", bikPhone); submit(fd, { method: "post" }); };
   const [testEmail, setTestEmail] = useState("");
   const [testPhone, setTestPhone] = useState("");
   const sendTest = () => {
@@ -169,7 +210,7 @@ export default function GamesAndPrizes() {
   });
 
   const save = () => {
-    const payload = { couponDays, requireOrder, freeGiftDailyLimit: freeLimit, spreadFreeGifts: spreadFree, giftFallback, omnisendMode: omniMode, omnisendKey: omniKey, omnisendRemoveKey: omniRemove, games: {} };
+    const payload = { couponDays, requireOrder, freeGiftDailyLimit: freeLimit, spreadFreeGifts: spreadFree, giftFallback, omnisendMode: omniMode, omnisendKey: omniKey, omnisendRemoveKey: omniRemove, couponFrom, couponLast, bikKey, bikSecret, bikRemoveKey: bikRemove, bikMode, bikReminders, bikWinTemplate: bikWin, bikReminderTemplate: bikRem, bikGiftTemplate: bikGift, games: {} };
     for (const id of Object.keys(games)) payload.games[id] = { ...games[id], prizes: games[id].prizes.map(({ _k, ...p }) => p) };
     const fd = new FormData();
     fd.append("payload", JSON.stringify(payload));
@@ -185,7 +226,11 @@ export default function GamesAndPrizes() {
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
-            {result?.omnisendTest ? (
+            {result?.bikTest ? (
+              result.bikTest.ok
+                ? <Banner tone="success" title={`WhatsApp test message sent to ${result.bikTest.to}.`}>Check that phone. The message uses your win template with the sample code CHMTEST5.</Banner>
+                : <Banner tone="critical" title="The WhatsApp test message was not sent.">{result.bikTest.error}</Banner>
+            ) : result?.omnisendTest ? (
               result.omnisendTest.ok
                 ? <Banner tone="success" title={`Test event sent for ${result.omnisendTest.email}.`}>Open Omnisend > Store settings > API > API logs to see it, and check your automation ran.</Banner>
                 : <Banner tone="critical" title="The test event was not sent.">{result.omnisendTest.error}</Banner>
@@ -204,6 +249,15 @@ export default function GamesAndPrizes() {
                   checked={requireOrder} onChange={setRequireOrder}
                 />
                 <InlineStack gap="400" wrap>
+                  <div style={{ width: 220 }}>
+                    <TextField label="Coupons work from" type="date" value={couponFrom} onChange={setCouponFrom} autoComplete="off" helpText="India time, 12:00 AM of this day." />
+                  </div>
+                  <div style={{ width: 220 }}>
+                    <TextField label="Coupons work until the end of" type="date" value={couponLast} onChange={setCouponLast} autoComplete="off" helpText="Last day the code is valid." />
+                  </div>
+                </InlineStack>
+                <Text as="p" variant="bodySm" tone="subdued">Won codes combine with your automatic store discount (your automatic discount must also allow combining). If these dates have passed, codes fall back to "valid for X days" below.</Text>
+                <InlineStack gap="400" wrap>
                   <div style={{ width: 260 }}>
                     <TextField label="Coupon valid for (days)" type="number" min={1} value={couponDays} onChange={setCouponDays} autoComplete="off" />
                   </div>
@@ -220,6 +274,31 @@ export default function GamesAndPrizes() {
                     value={giftFallback} onChange={setGiftFallback}
                   />
                 </div>
+                <Divider />
+                <Text as="h3" variant="headingSm">WhatsApp via Bik</Text>
+                <Text as="p" variant="bodySm" tone="subdued">Sends the win message, weekly coupon reminders and the free-gift message from your approved Bik templates.</Text>
+                <div style={{ maxWidth: 560 }}>
+                  <BlockStack gap="200">
+                    <TextField label="Bik app key" type="password" autoComplete="off" value={bikKey} onChange={(v) => { setBikKey(v); setBikRemove(false); }}
+                      placeholder={data.bikKey ? "Saved (" + data.bikHint + ") - type a new key and secret only to replace them" : "Paste your Bik app key"} />
+                    <TextField label="Bik app secret" type="password" autoComplete="off" value={bikSecret} onChange={(v) => { setBikSecret(v); setBikRemove(false); }}
+                      placeholder={data.bikKey ? "Saved" : "Paste your Bik app secret"} helpText="From dashboard.bik.ai > Settings > Developer tools. Saved encrypted and never shown again." />
+                    {data.bikKey ? <Checkbox label="Remove the saved Bik key" checked={bikRemove} onChange={(v) => { setBikRemove(v); if (v) { setBikKey(""); setBikSecret(""); } }} /> : null}
+                    <TextField label="Win message template id" value={bikWin} onChange={setBikWin} autoComplete="off" helpText="Template carnival_win_coupon" />
+                    <TextField label="Weekly reminder template id" value={bikRem} onChange={setBikRem} autoComplete="off" helpText="Template carnival_coupon_reminder" />
+                    <TextField label="Free gift template id" value={bikGift} onChange={setBikGift} autoComplete="off" helpText="Template carnival_free_gift" />
+                    <Select label="Send WhatsApp messages" options={[{ label: "Automatically for every win", value: "auto" }, { label: "Off", value: "off" }]} value={bikMode} onChange={setBikMode} />
+                    <Checkbox label="Send a reminder every week until the coupon is used or expires" checked={bikReminders} onChange={setBikReminders} />
+                    {data.bikKey && data.bikWinTemplate ? (
+                      <BlockStack gap="200">
+                        <TextField label="Send a test message to this mobile number" type="tel" value={bikPhone} onChange={setBikPhone} autoComplete="off" placeholder="9876543210" helpText="Uses your win template with the sample code CHMTEST5. Save first if you just changed the key or template." />
+                        <InlineStack><Button onClick={sendBikTest} loading={saving} disabled={!bikPhone}>Send test WhatsApp message</Button></InlineStack>
+                      </BlockStack>
+                    ) : null}
+                  </BlockStack>
+                </div>
+                <Divider />
+                <Text as="h3" variant="headingSm">Omnisend (optional)</Text>
                 <div style={{ maxWidth: 560 }}>
                   <TextField
                     label="Omnisend API key"

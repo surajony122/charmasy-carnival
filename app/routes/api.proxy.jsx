@@ -4,8 +4,11 @@ import prisma from "../db.server";
 import { existsSync, readFileSync } from "node:fs";
 import { buildPage } from "../carnival-page";
 import { notifyOmnisend, omnisendConfigured, resolveKey } from "../carnival/omnisend.server";
+import { bikReady, deliver, winMessage, giftMessage } from "../carnival/bik.server";
+import { buildGiftPage } from "../carnival/gift-page";
+import { randomBytes } from "node:crypto";
 import {
-  GAME_NAMES, activeGameFor, getSettings, loadGame, openPrizes, rollOutcome, prizeForPlay, withLock,
+  GAME_NAMES, activeGameFor, getSettings, loadGame, openPrizes, rollOutcome, prizeForPlay, withLock, couponWindow, lastDayText, startDayText,
 } from "../carnival/rules.server";
 import {
   maskEmail, normalizePhone, resolveOrder, upsertCustomer, saveWinToCustomer, createCustomerCode, addFreeProductToOrder, packGiftWithOrder,
@@ -26,12 +29,15 @@ const LEGACY_CODES = { 5: "CARNIVAL5", 10: "CARNIVAL10", 50: "CARNIVAL50", 100: 
 
 const clean = (v, max) => String(v || "").replace(/[^A-Za-z0-9_~-]/g, "").slice(0, max);
 
-function makeCode() {
+// Personal code: CHM + the customer's first name (letters only, up to 6) + 3 random characters, e.g. CHMSURAJ7K2.
+// Letters and digits only (WhatsApp coupon buttons accept nothing else); without a usable name: CHM + 7 random characters.
+function makeCode(firstName) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "";
-  for (let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return "CHM-" + out;
+  const rnd = (n) => { let o = ""; for (let i = 0; i < n; i++) o += chars[Math.floor(Math.random() * chars.length)]; return o; };
+  const name = String(firstName || "").normalize("NFD").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 6);
+  return "CHM" + (name.length >= 2 ? name + rnd(3) : rnd(7));
 }
+const makeToken = () => randomBytes(12).toString("base64url").replace(/[^A-Za-z0-9]/g, "").slice(0, 16).padEnd(16, "x");
 
 // Small in-memory limiter. Keyed per order (not per IP: behind Shopify's proxy and mobile networks many
 // customers can share one IP), plus a very high per-IP ceiling that only stops scripted abuse.
@@ -174,7 +180,9 @@ async function handleResult(ctx, fd) {
 function claimView(row, extra = {}) {
   return {
     ok: true, success: true, prizeLabel: row.prizeLabel, delivery: row.delivery, code: row.couponCode || null,
-    note: row.deliveryNote || "", email: row.email, notified: row.omnisendStatus === "sent", unique: !!(row.couponCode && row.couponCode.startsWith("CHM-")), ...extra,
+    note: row.deliveryNote || "", email: row.email, notified: row.omnisendStatus === "sent",
+    validTill: row.couponEndsAt ? lastDayText(row.couponEndsAt) : "",
+    activeFrom: row.couponStartsAt && row.couponStartsAt.getTime() > Date.now() + 3600000 ? startDayText(row.couponStartsAt) : "", unique: !!(row.couponCode && row.couponCode.startsWith("CHM")), ...extra,
   };
 }
 
@@ -221,6 +229,7 @@ async function handleClaim(ctx, fd) {
 
   const customerGid = await upsertCustomer(admin, email, phone);
   const days = settings.couponDays || 7;
+  const win = couponWindow(settings, { testMode: adminTest });     // when the personal code works (from 21 Oct for 30 days)
   let delivery = null, code = null, note = "", unique = false, editError = "";
 
   if (prize.kind === "FREE_PRODUCT") {
@@ -238,14 +247,14 @@ async function handleClaim(ctx, fd) {
       else editError += ` (and the pack-with-order note failed too: ${pk.error})`;
     }
     if (!delivery) {
-      code = makeCode();
-      const r = await createCustomerCode(admin, { code, kind: "FREE_PRODUCT", customerGid, days, variantId: prize.variantId });
+      code = makeCode(order?.firstName);
+      const r = await createCustomerCode(admin, { code, kind: "FREE_PRODUCT", customerGid, days, variantId: prize.variantId, startsAt: win.startsAt, endsAt: win.endsAt });
       if (r.ok) { delivery = "product_code"; unique = true; note = `Add ${prize.productTitle || "your gift"} to your cart and use this code at checkout.`; }
       else code = null;
     }
   } else {
-    code = makeCode();
-    const r = await createCustomerCode(admin, { code, kind: prize.kind, value: prize.value, customerGid, days });
+    code = makeCode(order?.firstName);
+    const r = await createCustomerCode(admin, { code, kind: prize.kind, value: prize.value, customerGid, days, startsAt: win.startsAt, endsAt: win.endsAt });
     if (r.ok) { delivery = "code"; unique = true; }
     else code = null;
   }
@@ -262,7 +271,11 @@ async function handleClaim(ctx, fd) {
 
   await prisma.gamePlay.update({
     where: { orderId: playRef },
-    data: { email, phone, couponCode: code, delivery, deliveryNote: note, deliveryError: editError || null, customerId: customerGid ? customerGid.split("/").pop() : row.customerId },
+    data: {
+      email, phone, couponCode: code, delivery, deliveryNote: note, deliveryError: editError || null, customerId: customerGid ? customerGid.split("/").pop() : row.customerId,
+      couponStartsAt: code ? win.startsAt : null, couponEndsAt: code ? win.endsAt : null,
+      giftToken: prize.kind === "FREE_PRODUCT" ? makeToken() : null, orderStatusUrl: order?.statusUrl || null, orderName: order?.name || null,
+    },
   });
   await saveWinToCustomer(admin, customerGid, { game: row.gameId, prize: row.prizeLabel, code, delivery, order: order?.name || playRef, wonAt: new Date().toISOString() });
 
@@ -270,6 +283,16 @@ async function handleClaim(ctx, fd) {
   // Omnisend: in "auto" mode every real win is sent on its own (never blocks or fails the customer's claim)
   if (!adminTest && omnisendConfigured(settings) && (settings.omnisendMode || "auto") === "auto") {
     notifyOmnisend(row, { days, whatsappConsent: false, key: resolveKey(settings) }).catch(() => {});
+  }
+  // WhatsApp through Bik (real wins only; Test Mode has its own test button in the admin)
+  if (!adminTest) {
+    if (!row.phone) {
+      prisma.gamePlay.update({ where: { orderId: playRef }, data: { waStatus: "skipped", waError: "No phone number on the order" } }).catch(() => {});
+    } else if (prize.kind === "FREE_PRODUCT" && bikReady(settings, "gift")) {
+      deliver(settings, row, giftMessage(settings, row, prize.productTitle)).catch(() => {});
+    } else if (prize.kind !== "FREE_PRODUCT" && row.couponCode && bikReady(settings, "win")) {
+      deliver(settings, row, winMessage(settings, row, win)).catch(() => {});
+    }
   }
   return claimView(row, { unique, days, notifyBtn: !adminTest && omnisendConfigured(settings) && settings.omnisendMode === "button" });
 }
@@ -306,9 +329,26 @@ export const action = async ({ request }) => {
 };
 
 /* ---------------- the page ---------------- */
+async function giftPage(ctx, token) {
+  const assets = (process.env.SHOPIFY_APP_URL || "https://charmasy-carnival.onrender.com").replace(/\/$/, "") + "/carnival";
+  const row = ctx.shop && token.length >= 12 ? await prisma.gamePlay.findFirst({ where: { giftToken: token, shop: ctx.shop } }) : null;
+  let page;
+  if (!row) page = buildGiftPage({ assets, found: false });
+  else {
+    const prize = await prizeForPlay(ctx.shop, row);
+    page = buildGiftPage({
+      assets, found: true, title: prize?.productTitle || String(row.prizeLabel || "").replace(/^FREE\s+/i, ""), image: prize?.imageUrl || "",
+      delivery: row.delivery, orderName: row.orderName || "your order", code: row.couponCode,
+      validTill: row.couponEndsAt ? lastDayText(row.couponEndsAt) : "", statusUrl: row.orderStatusUrl, shopUrl: "/",
+    });
+  }
+  return new Response(page, { headers: { "Content-Type": "application/liquid", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+}
+
 export const loader = async ({ request }) => {
   const ctx = await context(request);
   const url = new URL(request.url);
+  if (url.searchParams.get("gift")) return giftPage(ctx, clean(url.searchParams.get("gift"), 40));
   const rawOrderId = clean(url.searchParams.get("order_id"), 40);
   const orderId = rawOrderId !== "" ? rawOrderId : "PLAY_" + Date.now().toString(36);
   const orderBadge = rawOrderId !== "" && /^\d{1,9}$/.test(rawOrderId) ? "ORDER #" + rawOrderId : "";
