@@ -197,6 +197,25 @@ export default function GamesAndPrizes() {
     });
   };
 
+  // Pick one free product and add it to every game (replacing any free-product prize already there). It still obeys
+  // the "free gifts per day" limit shared by all games.
+  const [freeShare, setFreeShare] = useState("10");
+  const applyFreeToAll = async () => {
+    const selected = await shopify.resourcePicker({ type: "product", multiple: false, action: "select" });
+    if (!selected || !selected.length) return;
+    const prod = selected[0], variant = (prod.variants || [])[0];
+    const free = {
+      kind: "FREE_PRODUCT", value: "", productId: prod.id, productHandle: prod.handle || "", variantId: variant ? variant.id : "",
+      productTitle: prod.title + (variant && variant.title && variant.title !== "Default Title" ? ` (${variant.title})` : ""),
+      imageUrl: prod.images?.[0]?.originalSrc || prod.images?.[0]?.src || "", share: freeShare, dailyLimit: "",
+    };
+    setGames((g) => {
+      const out = {};
+      for (const id of Object.keys(g)) out[id] = { ...g[id], prizes: [...g[id].prizes.filter((p) => p.kind !== "FREE_PRODUCT"), { _k: ++keySeq, ...free }] };
+      return out;
+    });
+  };
+
   // 5% / 10% and Rs50 / Rs100 coupons, 90:10 inside each pair; free-product prizes are left as they are.
   const applyMix = () => setGames((g) => {
     const out = {};
@@ -336,6 +355,15 @@ export default function GamesAndPrizes() {
                   <Button onClick={applyMix}>Apply the standard coupon mix to all games</Button>
                   <Text as="p" variant="bodySm" tone="subdued">
                     Sets every game's coupons to: 5% OFF (90%) / 10% OFF (10%) and ₹50 OFF (90%) / ₹100 OFF (10%), with percent and rupee coupons equally likely. Your free-product prizes are kept. Press "Save all changes" afterwards.
+                  </Text>
+                </BlockStack>
+                <BlockStack gap="100">
+                  <InlineStack gap="300" blockAlign="end" wrap>
+                    <div style={{ width: 150 }}><TextField label="Free product weight" type="number" min={1} value={freeShare} onChange={setFreeShare} autoComplete="off" /></div>
+                    <Button onClick={applyFreeToAll}>Choose a free product for all games</Button>
+                  </InlineStack>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Adds the product you choose as a prize in every game (replacing any free product already there). The coupons keep their 90/10 split, and the free product can only be won up to "free gifts per day" times in total. Click Save all changes afterwards.
                   </Text>
                 </BlockStack>
               </BlockStack>
