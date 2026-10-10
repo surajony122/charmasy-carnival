@@ -23,6 +23,7 @@ export default function App() {
           Home
         </Link>
         <Link to="/app/games">Games &amp; prizes</Link>
+        <Link to="/app/gifts">Free gift winners</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>

@@ -285,7 +285,7 @@ async function handleClaim(ctx, fd) {
     notifyOmnisend(row, { days, whatsappConsent: false, key: resolveKey(settings) }).catch(() => {});
   }
   // WhatsApp through Bik (real wins only; Test Mode has its own test button in the admin)
-  if (!adminTest) {
+  if (!adminTest && (settings.bikMode || "auto") === "auto") {
     if (!row.phone) {
       prisma.gamePlay.update({ where: { orderId: playRef }, data: { waStatus: "skipped", waError: "No phone number on the order" } }).catch(() => {});
     } else if (prize.kind === "FREE_PRODUCT" && bikReady(settings, "gift")) {
@@ -295,6 +295,43 @@ async function handleClaim(ctx, fd) {
     }
   }
   return claimView(row, { unique, days, notifyBtn: !adminTest && omnisendConfigured(settings) && settings.omnisendMode === "button" });
+}
+
+// What the win screen needs to show the "send it to my WhatsApp" consent block (consent mode only).
+async function waExtras(ctx, playRef) {
+  const { shop, settings, adminTest } = ctx;
+  if (adminTest || settings.bikMode !== "consent") return {};
+  const row = await prisma.gamePlay.findUnique({ where: { orderId: playRef } });
+  if (!row || row.shop !== shop || !row.delivery || row.delivery === "pending") return {};
+  const kind = row.prizeKind === "FREE_PRODUCT" ? "gift" : "win";
+  if (!bikReady(settings, kind)) return {};
+  const digits = String(row.phone || "").replace(/\D/g, "");
+  return { waConsent: true, waSent: row.waStatus === "sent", waNeedPhone: !row.phone, waPhone: row.phone ? "+" + digits.slice(0, digits.length - 5).replace(/\d/g, "•") + digits.slice(-5) : "" };
+}
+
+// "Send it to my WhatsApp": the customer's tap is their consent to this message and the weekly coupon reminders.
+async function handleWaOptin(ctx, fd) {
+  const { shop, settings, adminTest } = ctx;
+  if (adminTest || settings.bikMode !== "consent") return fail("off", "This isn't available right now.");
+  const row = await prisma.gamePlay.findUnique({ where: { orderId: clean(fd.get("orderId"), 80) } });
+  if (!row || row.shop !== shop || !row.won || !row.delivery || row.delivery === "pending") return fail("not_won", "We couldn't find your prize.");
+  if (row.waStatus === "sent") return { ok: true, success: true, sent: true };
+  const phone = row.phone || normalizePhone(fd.get("phone"));
+  if (!phone) return fail("need_phone", "Please enter a valid 10-digit mobile number.");
+  const free = row.prizeKind === "FREE_PRODUCT";
+  if (!bikReady(settings, free ? "gift" : "win")) return fail("off", "This isn't available right now.");
+  const now = new Date();
+  await prisma.gamePlay.update({ where: { orderId: row.orderId }, data: { phone, waConsentAt: now } });
+  const play = { ...row, phone };
+  let msg;
+  if (free) {
+    const prize = await prizeForPlay(shop, row);
+    msg = giftMessage(settings, play, prize?.productTitle || String(row.prizeLabel || "").replace(/^FREE\s+/i, ""));
+  } else {
+    msg = winMessage(settings, play, { startsAt: row.couponStartsAt || now, endsAt: row.couponEndsAt || now });
+  }
+  const r = await deliver(settings, play, msg);
+  return r.ok ? { ok: true, success: true, sent: true } : fail("send_failed", "We couldn't send it just now. Please copy your code from this screen.");
 }
 
 // "Send my code on WhatsApp" button: the tap is the customer's consent.
@@ -316,11 +353,16 @@ export const action = async ({ request }) => {
       return json(fail("rate", "Too many attempts. Please wait a minute and try again."));
     }
     const ctx = await context(request);
-    if (!ctx.shop && (intent === "play" || intent === "result" || intent === "claim" || intent === "notify")) return json(fail("unverified", UNVERIFIED));
+    if (!ctx.shop && (intent === "play" || intent === "result" || intent === "claim" || intent === "notify" || intent === "wa_optin")) return json(fail("unverified", UNVERIFIED));
     if (intent === "play") return json(await handlePlay(ctx, fd));
     if (intent === "result") return json(await handleResult(ctx, fd));
-    if (intent === "claim") return json(await handleClaim(ctx, fd));
+    if (intent === "claim") {
+      const res = await handleClaim(ctx, fd);
+      if (res && res.success) Object.assign(res, await waExtras(ctx, clean(fd.get("orderId"), 80)));
+      return json(res);
+    }
     if (intent === "notify") return json(await handleNotify(ctx, fd));
+    if (intent === "wa_optin") return json(await handleWaOptin(ctx, fd));
     return json(fail("bad_request", "Unknown request."));
   } catch (err) {
     console.error("Carnival action error:", err);

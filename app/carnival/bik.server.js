@@ -19,7 +19,7 @@ export function bikCreds(settings) {
 export const bikHint = (settings) => { const c = bikCreds(settings); return c ? "…" + c.key.slice(-4) : ""; };
 export function bikReady(settings, kind = "win") {
   const id = kind === "reminder" ? settings?.bikReminderTemplate : kind === "gift" ? settings?.bikGiftTemplate : settings?.bikWinTemplate;
-  return !!(bikCreds(settings) && id && (settings.bikMode || "auto") === "auto");
+  return !!(bikCreds(settings) && id && ["auto", "consent"].includes(settings.bikMode || "auto"));
 }
 
 // Bik allows no more than we can sensibly send: one message at a time, a short pause between them.

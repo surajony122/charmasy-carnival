@@ -70,6 +70,7 @@ model GamePlay {
   waSentAt    DateTime?
   waReminders Int       @default(0)
   waLastAt    DateTime? // last WhatsApp message (win or reminder)
+  waConsentAt DateTime? // the customer tapped "send it to my WhatsApp" (consent mode)
 
   @@index([giftToken])
 }
@@ -92,7 +93,7 @@ model GameSettings {
   bikWinTemplate String?                 // Bik template ids
   bikReminderTemplate String?
   bikGiftTemplate String?
-  bikMode String @default("auto")        // "off" | "auto"
+  bikMode String @default("auto")        // "off" | "auto" (every win) | "consent" (only when the customer taps "send it to my WhatsApp")
   bikReminders Boolean @default(true)    // weekly reminders until the coupon is used or expires
   giftFallback String @default("pack")  // when a free product cannot be added to the order: "pack" = tag + note on the order, "code" = personal 100% code (one play per order)
 }

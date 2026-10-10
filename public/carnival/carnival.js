@@ -530,6 +530,32 @@
       };
       card.insertBefore(wa, card.querySelector("#cShop"));
     }
+    // "Send it to my WhatsApp": shown only when the store owner chose consent mode. Tapping the button is the customer's consent.
+    if (d.waConsent) {
+      var wb = document.createElement("div");
+      wb.style.cssText = "margin:10px auto;max-width:300px;text-align:center";
+      if (d.waSent) wb.innerHTML = '<div class="fine" style="font-weight:bold">✓ Sent to your WhatsApp</div>';
+      else {
+        wb.innerHTML =
+          (d.waNeedPhone ? '<input class="ov-input" id="waPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="Your WhatsApp number" style="margin-bottom:8px">' :
+            '<div class="fine" style="margin-bottom:6px">WhatsApp: <b>' + esc(d.waPhone) + '</b></div>') +
+          '<button class="btn3d small" id="waGo">📲 SEND IT TO MY WHATSAPP</button>' +
+          '<div class="ov-err" id="waErr"></div>' +
+          '<div class="fine" style="margin-top:6px">By tapping, you agree to get this message and a weekly reminder for your coupon on WhatsApp from Charmacy. Reply STOP anytime.</div>';
+      }
+      card.insertBefore(wb, card.querySelector("#cShop"));
+      var go = wb.querySelector("#waGo");
+      if (go) go.onclick = function () {
+        var ph = wb.querySelector("#waPhone"), er = wb.querySelector("#waErr");
+        if (ph && ph.value.replace(/\D/g, "").length < 10) { er.textContent = "Please enter your 10-digit mobile number."; return; }
+        er.textContent = ""; go.disabled = true; go.textContent = "SENDING…";
+        var fields = { intent: "wa_optin", orderId: PLAY.playRef }; if (ph) fields.phone = ph.value.trim();
+        post(fields).then(function (r) {
+          if (r && r.success) wb.innerHTML = '<div class="fine" style="font-weight:bold">✓ Sent to your WhatsApp</div>';
+          else { go.disabled = false; go.textContent = "TRY AGAIN"; er.textContent = (r && (r.error || r.message)) || "Could not send. Please copy your code from this screen."; }
+        }).catch(function () { go.disabled = false; go.textContent = "TRY AGAIN"; er.textContent = "Network error. Please try again."; });
+      };
+    }
     card.querySelector("#cShop").onclick = function () {
       window.location.href = d.code && !d.activeFrom ? "/discount/" + encodeURIComponent(d.code) + "?redirect=" + shopUrl() : shopUrl();
     };

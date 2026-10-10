@@ -44,7 +44,7 @@ export const loader = async ({ request }) => {
   return json({ games, couponDays: settings.couponDays ?? 7, requireOrder: settings.requireOrder !== false, freeGiftDailyLimit: settings.freeGiftDailyLimit ?? 6, spreadFreeGifts: settings.spreadFreeGifts !== false, giftFallback: settings.giftFallback === "code" ? "code" : "pack", omnisendMode: ["off", "button"].includes(settings.omnisendMode) ? settings.omnisendMode : "auto", omnisendKey: omnisendConfigured(settings), omnisendKeyHint: keyHint(settings),
     couponFrom: istDay(settings.couponStartsAt ? new Date(settings.couponStartsAt) : DEFAULT_COUPON_START),
     couponLast: istDay(new Date((settings.couponEndsAt ? new Date(settings.couponEndsAt) : DEFAULT_COUPON_END).getTime() - 1000)),
-    bikKey: !!bikCreds(settings), bikHint: bikHint(settings), bikMode: settings.bikMode === "off" ? "off" : "auto", bikReminders: settings.bikReminders !== false,
+    bikKey: !!bikCreds(settings), bikHint: bikHint(settings), bikMode: ["off", "consent"].includes(settings.bikMode) ? settings.bikMode : "auto", bikReminders: settings.bikReminders !== false,
     bikWinTemplate: settings.bikWinTemplate || "", bikReminderTemplate: settings.bikReminderTemplate || "", bikGiftTemplate: settings.bikGiftTemplate || "" });
 };
 
@@ -74,7 +74,7 @@ export const action = async ({ request }) => {
     if (!bikCreds(st)) return json({ bikTest: { ok: false, error: "Save your Bik key and secret first, then send the test." } });
     if (!st.bikWinTemplate) return json({ bikTest: { ok: false, error: "Save the win template id first." } });
     const r = await sendTestMessage(st, to);
-    return json({ bikTest: { ok: r.ok, error: r.error || "", to } });
+    return json({ bikTest: { ok: r.ok, error: r.error || "", to, id: r.id || "" } });
   }
   let data;
   try { data = JSON.parse(String(fd.get("payload") || "{}")); } catch { return json({ ok: false, error: "Could not read the form." }); }
@@ -91,7 +91,7 @@ export const action = async ({ request }) => {
   const dates = { couponStartsAt: from, couponEndsAt: last ? new Date(last.getTime() + 24 * 3600 * 1000) : null };
   ops.push(prisma.gameSettings.update({ where: { shop }, data: dates }));
   // Bik (WhatsApp): key + secret are replaced only when both are typed; template ids and switches always
-  const bikData = { bikMode: data.bikMode === "off" ? "off" : "auto", bikReminders: !!data.bikReminders, bikWinTemplate: cleanId(data.bikWinTemplate), bikReminderTemplate: cleanId(data.bikReminderTemplate), bikGiftTemplate: cleanId(data.bikGiftTemplate) };
+  const bikData = { bikMode: ["off", "consent"].includes(data.bikMode) ? data.bikMode : "auto", bikReminders: !!data.bikReminders, bikWinTemplate: cleanId(data.bikWinTemplate), bikReminderTemplate: cleanId(data.bikReminderTemplate), bikGiftTemplate: cleanId(data.bikGiftTemplate) };
   if (data.bikRemoveKey) bikData.bikKeyEnc = null;
   else if (String(data.bikKey || "").trim() && String(data.bikSecret || "").trim()) bikData.bikKeyEnc = encryptCreds(data.bikKey, data.bikSecret);
   ops.push(prisma.gameSettings.update({ where: { shop }, data: bikData }));
@@ -247,7 +247,7 @@ export default function GamesAndPrizes() {
           <BlockStack gap="400">
             {result?.bikTest ? (
               result.bikTest.ok
-                ? <Banner tone="success" title={`WhatsApp test message sent to ${result.bikTest.to}.`}>Check that phone. The message uses your win template with the sample code CHMTEST5.</Banner>
+                ? <Banner tone="success" title={`WhatsApp test message sent to ${result.bikTest.to}.`}>Bik accepted it{result.bikTest.id ? ` (message id ${result.bikTest.id})` : ""}. Check that phone. If nothing arrives, look for this number or message id in Bik, in the inbox / message reports, and read the delivery status or error there.</Banner>
                 : <Banner tone="critical" title="The WhatsApp test message was not sent.">{result.bikTest.error}</Banner>
             ) : result?.omnisendTest ? (
               result.omnisendTest.ok
@@ -306,7 +306,7 @@ export default function GamesAndPrizes() {
                     <TextField label="Win message template id" value={bikWin} onChange={setBikWin} autoComplete="off" helpText="Template carnival_win_coupon" />
                     <TextField label="Weekly reminder template id" value={bikRem} onChange={setBikRem} autoComplete="off" helpText="Template carnival_coupon_reminder" />
                     <TextField label="Free gift template id" value={bikGift} onChange={setBikGift} autoComplete="off" helpText="Template carnival_free_gift" />
-                    <Select label="Send WhatsApp messages" options={[{ label: "Automatically for every win", value: "auto" }, { label: "Off", value: "off" }]} value={bikMode} onChange={setBikMode} />
+                    <Select label="Send WhatsApp messages" options={[{ label: "Automatically for every win", value: "auto" }, { label: "Only when the customer taps \"Send it to my WhatsApp\" (their consent)", value: "consent" }, { label: "Off", value: "off" }]} value={bikMode} onChange={setBikMode} />
                     <Checkbox label="Send a reminder every week until the coupon is used or expires" checked={bikReminders} onChange={setBikReminders} />
                     {data.bikKey && data.bikWinTemplate ? (
                       <BlockStack gap="200">

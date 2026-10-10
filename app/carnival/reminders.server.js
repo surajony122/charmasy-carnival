@@ -22,7 +22,7 @@ export function isDue(play, now) {
 export async function runReminders({ now = Date.now(), getAdmin, limit = 200 } = {}) {
   const out = { sent: 0, checked: 0, used: 0, skipped: 0 };
   if (!inSendWindow(now)) return out;
-  const shops = await prisma.gameSettings.findMany({ where: { bikMode: "auto", bikReminders: true, bikReminderTemplate: { not: null }, bikKeyEnc: { not: null } } });
+  const shops = await prisma.gameSettings.findMany({ where: { bikMode: { in: ["auto", "consent"] }, bikReminders: true, bikReminderTemplate: { not: null }, bikKeyEnc: { not: null } } });
   for (const settings of shops) {
     if (!bikCreds(settings) || !bikReady(settings, "reminder")) continue;
     const candidates = await prisma.gamePlay.findMany({
