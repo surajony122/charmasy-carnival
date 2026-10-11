@@ -73,14 +73,22 @@ export const cleanLanding = (v) => {
   try { if (/^https?:\/\//i.test(p)) p = new URL(p).pathname; } catch (e) {}
   return /^\/[A-Za-z0-9/_\-.%]{0,119}$/.test(p) && !p.startsWith("//") && !p.includes("..") ? p : "";
 };
-const codeButtons = (code, landingPath) => { const p = cleanLanding(landingPath); return [{ type: "copy_code", index: 0, data: code }, { type: "URL", index: 1, data: p ? `${code}?redirect=${p}` : code }]; };
+const storeBase = (v) => { try { const u = new URL(String(v || "")); return u.protocol === "https:" ? u.origin : "https://charmacyworld.com"; } catch (e) { return "https://charmacyworld.com"; } };
+// opts: { bikLandingPath, bikStoreUrl, bikUrlFull }. Bik's docs show the URL button taking a full link; if Bik turns out to want only the end
+// part (the template's ".../discount/{{1}}" variable), the admin switch bikUrlFull=false sends just that.
+const codeButtons = (code, opts = {}) => {
+  const p = cleanLanding(opts.bikLandingPath);
+  const tail = p ? `${code}?redirect=${p}` : code;
+  const data = opts.bikUrlFull === false ? tail : `${storeBase(opts.bikStoreUrl)}/discount/${tail}`;
+  return [{ type: "copy_code", index: 0, data: code }, { type: "URL", index: 1, data }];
+};
 const swapButtons = (btns) => btns.slice().reverse().map((b, i) => ({ ...b, index: i }));
 
-export const winMessage = (settings, play, w) => ({ to: play.phone, templateId: settings.bikWinTemplate, body: [play.prizeLabel, play.couponCode, validText(w)], button: codeButtons(play.couponCode, settings.bikLandingPath), callbackData: { play: play.orderId, kind: "win" } });
+export const winMessage = (settings, play, w) => ({ to: play.phone, templateId: settings.bikWinTemplate, body: [play.prizeLabel, play.couponCode, validText(w)], button: codeButtons(play.couponCode, settings), callbackData: { play: play.orderId, kind: "win" } });
 export const reminderMessage = (settings, play, w, now = Date.now()) => ({
   to: play.phone, templateId: settings.bikReminderTemplate,
   body: [play.prizeLabel, play.couponCode, lastDayText(w.endsAt), String(Math.max(1, Math.ceil((w.endsAt.getTime() - now) / 86400000)))],
-  button: codeButtons(play.couponCode, settings.bikLandingPath), callbackData: { play: play.orderId, kind: "reminder" },
+  button: codeButtons(play.couponCode, settings), callbackData: { play: play.orderId, kind: "reminder" },
 });
 export const giftMessage = (settings, play, title) => ({ to: play.phone, templateId: settings.bikGiftTemplate, body: [title || "gift"], button: [{ type: "URL", index: 0, data: play.giftToken }], callbackData: { play: play.orderId, kind: "gift" } });
 
@@ -112,7 +120,7 @@ export function deliver(settings, play, msg, { reminder = false, at = null } = {
 export async function sendTestMessage(settings, to) {
   const w = { startsAt: new Date(Date.now() - 1000), endsAt: new Date(Date.now() + 30 * 86400000) };
   return sendTemplate(bikCreds(settings), {
-    to, templateId: settings.bikWinTemplate, body: ["10% OFF Coupon", "CHMTEST5", lastDayText(w.endsAt)], button: codeButtons("CHMTEST5", settings.bikLandingPath),
+    to, templateId: settings.bikWinTemplate, body: ["10% OFF Coupon", "CHMTEST5", lastDayText(w.endsAt)], button: codeButtons("CHMTEST5", settings),
     callbackData: { kind: "test" },
   });
 }
