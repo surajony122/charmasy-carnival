@@ -95,6 +95,7 @@ model GameSettings {
   bikGiftTemplate String?
   bikMode String @default("auto")        // "off" | "auto" (every win) | "consent" (only when the customer taps "send it to my WhatsApp")
   bikWebhookKeyEnc String?               // key Bik sends with its status webhooks (encrypted)
+  bikLandingPath String @default("/collections/new-arrivals-25")  // page "Shop now" opens after the code is applied (empty = home page)
   bikReminders Boolean @default(true)    // weekly reminders until the coupon is used or expires
   giftFallback String @default("pack")  // when a free product cannot be added to the order: "pack" = tag + note on the order, "code" = personal 100% code (one play per order)
 }

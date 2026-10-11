@@ -66,14 +66,21 @@ export async function sendTemplate(creds, { to, templateId, body, button, callba
 // ---- the three messages ----
 const validText = (w) => (w.startsAt.getTime() > Date.now() + 3600000 ? `${lastDayText(w.endsAt)} (active from ${startDayText(w.startsAt)})` : lastDayText(w.endsAt));
 // Order must match the template in Bik: Copy coupon code first, Shop Now (link) second. sendTemplate swaps them if Bik says otherwise.
-const codeButtons = (code) => [{ type: "copy_code", index: 0, data: code }, { type: "URL", index: 1, data: code }];
+// The link button's variable is the end of ".../discount/{{1}}": the code, plus "?redirect=/collections/all" to land on the products page.
+// landingPath comes from the admin setting (for example /collections/new-arrivals-25); empty = just apply the code.
+export const cleanLanding = (v) => {
+  let p = String(v == null ? "" : v).trim();
+  try { if (/^https?:\/\//i.test(p)) p = new URL(p).pathname; } catch (e) {}
+  return /^\/[A-Za-z0-9/_\-.%]{0,119}$/.test(p) && !p.startsWith("//") && !p.includes("..") ? p : "";
+};
+const codeButtons = (code, landingPath) => { const p = cleanLanding(landingPath); return [{ type: "copy_code", index: 0, data: code }, { type: "URL", index: 1, data: p ? `${code}?redirect=${p}` : code }]; };
 const swapButtons = (btns) => btns.slice().reverse().map((b, i) => ({ ...b, index: i }));
 
-export const winMessage = (settings, play, w) => ({ to: play.phone, templateId: settings.bikWinTemplate, body: [play.prizeLabel, play.couponCode, validText(w)], button: codeButtons(play.couponCode), callbackData: { play: play.orderId, kind: "win" } });
+export const winMessage = (settings, play, w) => ({ to: play.phone, templateId: settings.bikWinTemplate, body: [play.prizeLabel, play.couponCode, validText(w)], button: codeButtons(play.couponCode, settings.bikLandingPath), callbackData: { play: play.orderId, kind: "win" } });
 export const reminderMessage = (settings, play, w, now = Date.now()) => ({
   to: play.phone, templateId: settings.bikReminderTemplate,
   body: [play.prizeLabel, play.couponCode, lastDayText(w.endsAt), String(Math.max(1, Math.ceil((w.endsAt.getTime() - now) / 86400000)))],
-  button: codeButtons(play.couponCode), callbackData: { play: play.orderId, kind: "reminder" },
+  button: codeButtons(play.couponCode, settings.bikLandingPath), callbackData: { play: play.orderId, kind: "reminder" },
 });
 export const giftMessage = (settings, play, title) => ({ to: play.phone, templateId: settings.bikGiftTemplate, body: [title || "gift"], button: [{ type: "URL", index: 0, data: play.giftToken }], callbackData: { play: play.orderId, kind: "gift" } });
 
@@ -105,7 +112,7 @@ export function deliver(settings, play, msg, { reminder = false, at = null } = {
 export async function sendTestMessage(settings, to) {
   const w = { startsAt: new Date(Date.now() - 1000), endsAt: new Date(Date.now() + 30 * 86400000) };
   return sendTemplate(bikCreds(settings), {
-    to, templateId: settings.bikWinTemplate, body: ["10% OFF Coupon", "CHMTEST5", lastDayText(w.endsAt)], button: codeButtons("CHMTEST5"),
+    to, templateId: settings.bikWinTemplate, body: ["10% OFF Coupon", "CHMTEST5", lastDayText(w.endsAt)], button: codeButtons("CHMTEST5", settings.bikLandingPath),
     callbackData: { kind: "test" },
   });
 }

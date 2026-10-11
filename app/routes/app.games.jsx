@@ -11,7 +11,7 @@ import { GAME_NAMES, SKILL_GAMES } from "../carnival/constants";
 import { loadGame, getSettings } from "../carnival/rules.server";
 import { normalizePhone } from "../carnival/shopify-ops.server";
 import { encryptKey, omnisendConfigured, keyHint, resolveKey, sendTestEvent } from "../carnival/omnisend.server";
-import { bikCreds, bikHint, encryptCreds, sendTestMessage } from "../carnival/bik.server";
+import { bikCreds, bikHint, encryptCreds, sendTestMessage, cleanLanding } from "../carnival/bik.server";
 import { DEFAULT_COUPON_START, DEFAULT_COUPON_END } from "../carnival/rules.server";
 
 // India-time day <-> Date helpers for the coupon dates (a day is 00:00 IST to 00:00 IST)
@@ -44,7 +44,7 @@ export const loader = async ({ request }) => {
   return json({ games, couponDays: settings.couponDays ?? 7, requireOrder: settings.requireOrder !== false, freeGiftDailyLimit: settings.freeGiftDailyLimit ?? 6, spreadFreeGifts: settings.spreadFreeGifts !== false, giftFallback: settings.giftFallback === "code" ? "code" : "pack", omnisendMode: ["off", "button"].includes(settings.omnisendMode) ? settings.omnisendMode : "auto", omnisendKey: omnisendConfigured(settings), omnisendKeyHint: keyHint(settings),
     couponFrom: istDay(settings.couponStartsAt ? new Date(settings.couponStartsAt) : DEFAULT_COUPON_START),
     couponLast: istDay(new Date((settings.couponEndsAt ? new Date(settings.couponEndsAt) : DEFAULT_COUPON_END).getTime() - 1000)),
-    bikKey: !!bikCreds(settings), bikHint: bikHint(settings), bikMode: ["off", "consent"].includes(settings.bikMode) ? settings.bikMode : "auto", bikReminders: settings.bikReminders !== false,
+    bikKey: !!bikCreds(settings), bikHint: bikHint(settings), bikMode: ["off", "consent"].includes(settings.bikMode) ? settings.bikMode : "auto", bikLandingPath: settings.bikLandingPath ?? "/collections/new-arrivals-25", bikReminders: settings.bikReminders !== false,
     bikWinTemplate: settings.bikWinTemplate || "", bikReminderTemplate: settings.bikReminderTemplate || "", bikGiftTemplate: settings.bikGiftTemplate || "" });
 };
 
@@ -94,7 +94,7 @@ export const action = async ({ request }) => {
   const dates = { couponStartsAt: from, couponEndsAt: last ? new Date(last.getTime() + 24 * 3600 * 1000) : null };
   ops.push(prisma.gameSettings.update({ where: { shop }, data: dates }));
   // Bik (WhatsApp): key + secret are replaced only when both are typed; template ids and switches always
-  const bikData = { bikMode: ["off", "consent"].includes(data.bikMode) ? data.bikMode : "auto", bikReminders: !!data.bikReminders, bikWinTemplate: cleanId(data.bikWinTemplate), bikReminderTemplate: cleanId(data.bikReminderTemplate), bikGiftTemplate: cleanId(data.bikGiftTemplate) };
+  const bikData = { bikMode: ["off", "consent"].includes(data.bikMode) ? data.bikMode : "auto", bikReminders: !!data.bikReminders, bikLandingPath: cleanLanding(data.bikLandingPath), bikWinTemplate: cleanId(data.bikWinTemplate), bikReminderTemplate: cleanId(data.bikReminderTemplate), bikGiftTemplate: cleanId(data.bikGiftTemplate) };
   if (data.bikRemoveKey) bikData.bikKeyEnc = null;
   else if (String(data.bikKey || "").trim() && String(data.bikSecret || "").trim()) bikData.bikKeyEnc = encryptCreds(data.bikKey, data.bikSecret);
   ops.push(prisma.gameSettings.update({ where: { shop }, data: bikData }));
@@ -166,6 +166,7 @@ export default function GamesAndPrizes() {
   const [bikRemove, setBikRemove] = useState(false);
   const [bikMode, setBikMode] = useState(data.bikMode);
   const [bikReminders, setBikReminders] = useState(data.bikReminders);
+  const [bikLanding, setBikLanding] = useState(data.bikLandingPath);
   const [bikWin, setBikWin] = useState(data.bikWinTemplate);
   const [bikRem, setBikRem] = useState(data.bikReminderTemplate);
   const [bikGift, setBikGift] = useState(data.bikGiftTemplate);
@@ -232,7 +233,7 @@ export default function GamesAndPrizes() {
   });
 
   const save = () => {
-    const payload = { couponDays, requireOrder, freeGiftDailyLimit: freeLimit, spreadFreeGifts: spreadFree, giftFallback, omnisendMode: omniMode, omnisendKey: omniKey, omnisendRemoveKey: omniRemove, couponFrom, couponLast, bikKey, bikSecret, bikRemoveKey: bikRemove, bikMode, bikReminders, bikWinTemplate: bikWin, bikReminderTemplate: bikRem, bikGiftTemplate: bikGift, games: {} };
+    const payload = { couponDays, requireOrder, freeGiftDailyLimit: freeLimit, spreadFreeGifts: spreadFree, giftFallback, omnisendMode: omniMode, omnisendKey: omniKey, omnisendRemoveKey: omniRemove, couponFrom, couponLast, bikKey, bikSecret, bikRemoveKey: bikRemove, bikMode, bikReminders, bikLandingPath: bikLanding, bikWinTemplate: bikWin, bikReminderTemplate: bikRem, bikGiftTemplate: bikGift, games: {} };
     for (const id of Object.keys(games)) payload.games[id] = { ...games[id], prizes: games[id].prizes.map(({ _k, ...p }) => p) };
     const fd = new FormData();
     fd.append("payload", JSON.stringify(payload));
@@ -310,6 +311,8 @@ export default function GamesAndPrizes() {
                     <TextField label="Weekly reminder template id" value={bikRem} onChange={setBikRem} autoComplete="off" helpText="Template carnival_coupon_reminder" />
                     <TextField label="Free gift template id" value={bikGift} onChange={setBikGift} autoComplete="off" helpText="Template carnival_free_gift" />
                     <Select label="Send WhatsApp messages" options={[{ label: "Automatically for every win", value: "auto" }, { label: "Only when the customer taps \"Send it to my WhatsApp\" (their consent)", value: "consent" }, { label: "Off", value: "off" }]} value={bikMode} onChange={setBikMode} />
+                    <TextField label='Page to open after "Shop now" (code applied first)' value={bikLanding} onChange={setBikLanding} autoComplete="off" placeholder="/collections/new-arrivals-25"
+                      helpText="A page on your store, for example /collections/new-arrivals-25 (or paste the full link). Empty = home page. Also used by the win screen's Shop button." />
                     <Checkbox label="Send a reminder every week until the coupon is used or expires" checked={bikReminders} onChange={setBikReminders} />
                     {data.bikKey && data.bikWinTemplate ? (
                       <BlockStack gap="200">

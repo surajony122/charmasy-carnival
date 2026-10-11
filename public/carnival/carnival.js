@@ -369,7 +369,7 @@
     cleanups.push(function () { alive = false; cancelAnimationFrame(id); cv.remove(); });
   }
 
-  function shopUrl() { return "/collections/all"; }
+  function shopUrl() { return (window.CARNIVAL && window.CARNIVAL.shopPath) || "/collections/all"; }
 
   function showResult(o) {
     var stage = els.stage;

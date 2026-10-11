@@ -4,7 +4,7 @@ import prisma from "../db.server";
 import { existsSync, readFileSync } from "node:fs";
 import { buildPage } from "../carnival-page";
 import { notifyOmnisend, omnisendConfigured, resolveKey } from "../carnival/omnisend.server";
-import { bikReady, deliver, winMessage, giftMessage } from "../carnival/bik.server";
+import { bikReady, deliver, winMessage, giftMessage, cleanLanding } from "../carnival/bik.server";
 import { buildGiftPage } from "../carnival/gift-page";
 import { randomBytes } from "node:crypto";
 import {
@@ -411,7 +411,7 @@ export const loader = async ({ request }) => {
     version,
     bundled: BUNDLED,
     css: CSS,
-    cfg: { orderId, customerId, orderBadge, initialGame, isTest, activeGame, testPrize: ctx.adminTest && url.searchParams.get("testprize") === "free" ? "free" : "" },
+    cfg: { orderId, customerId, orderBadge, initialGame, isTest, activeGame, shopPath: cleanLanding(ctx.settings.bikLandingPath ?? "/collections/new-arrivals-25") || "/collections/all", testPrize: ctx.adminTest && url.searchParams.get("testprize") === "free" ? "free" : "" },
   });
   return new Response(html, { headers: { "Content-Type": "application/liquid" } });
 };
