@@ -16,7 +16,7 @@ export async function pollStatuses({ shop = null, now = Date.now(), limit = 200 
     const creds = bikCreds(settings);
     if (!creds) continue;
     const logs = await prisma.whatsAppLog.findMany({
-      where: { shop: settings.shop, status: { in: OPEN }, messageId: { not: null }, createdAt: { gte: new Date(now - 3 * 86400000), lte: new Date(now - 20000) } },
+      where: { shop: settings.shop, kind: { not: "email" }, status: { in: OPEN }, messageId: { not: null }, createdAt: { gte: new Date(now - 3 * 86400000), lte: new Date(now - 20000) } },
       orderBy: { createdAt: "desc" }, take: limit,
     });
     for (let i = 0; i < logs.length; i += 20) {

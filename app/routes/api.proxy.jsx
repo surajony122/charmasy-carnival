@@ -6,6 +6,7 @@ import { buildPage } from "../carnival-page";
 import { notifyOmnisend, omnisendConfigured, resolveKey } from "../carnival/omnisend.server";
 import { bikReady, deliver, winMessage, giftMessage, cleanLanding } from "../carnival/bik.server";
 import { buildGiftPage } from "../carnival/gift-page";
+import { emailReady, notifyEmail } from "../carnival/email.server";
 import { randomBytes } from "node:crypto";
 import {
   GAME_NAMES, activeGameFor, getSettings, loadGame, openPrizes, rollOutcome, prizeForPlay, withLock, couponWindow, lastDayText, startDayText,
@@ -284,6 +285,8 @@ async function handleClaim(ctx, fd) {
   if (!adminTest && omnisendConfigured(settings) && (settings.omnisendMode || "auto") === "auto") {
     notifyOmnisend(row, { days, whatsappConsent: false, key: resolveKey(settings) }).catch(() => {});
   }
+  // Prize email through Bik: "all" sends it to every winner now; "fallback" is handled by the background check (WhatsApp not delivered)
+  if (settings.bikEmailMode === "all" && emailReady(settings) && row.email) notifyEmail(settings, row, prize.productTitle).catch(() => {});
   // WhatsApp through Bik (real wins only; Test Mode has its own test button in the admin)
   if ((settings.bikMode || "auto") === "auto") {
     if (!row.phone) {

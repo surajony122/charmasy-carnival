@@ -12,6 +12,7 @@ import { loadGame, getSettings } from "../carnival/rules.server";
 import { normalizePhone } from "../carnival/shopify-ops.server";
 import { encryptKey, omnisendConfigured, keyHint, resolveKey, sendTestEvent } from "../carnival/omnisend.server";
 import { bikCreds, bikHint, encryptCreds, sendTestMessage, cleanLanding } from "../carnival/bik.server";
+import { sendTestEmail } from "../carnival/email.server";
 import { DEFAULT_COUPON_START, DEFAULT_COUPON_END } from "../carnival/rules.server";
 import { countStale, startReapply, isRunning } from "../carnival/recode.server";
 import { unauthenticated } from "../shopify.server";
@@ -44,6 +45,7 @@ export const loader = async ({ request }) => {
     };
   }
   return json({ games, couponDays: settings.couponDays ?? 7, requireOrder: settings.requireOrder !== false, freeGiftDailyLimit: settings.freeGiftDailyLimit ?? 6, spreadFreeGifts: settings.spreadFreeGifts !== false, giftFallback: settings.giftFallback === "code" ? "code" : "pack", omnisendMode: ["off", "button"].includes(settings.omnisendMode) ? settings.omnisendMode : "auto", omnisendKey: omnisendConfigured(settings), omnisendKeyHint: keyHint(settings),
+    bikEmailFrom: settings.bikEmailFrom || "", bikEmailName: settings.bikEmailName || "Charmacy Carnival", bikEmailMode: ["fallback", "all"].includes(settings.bikEmailMode) ? settings.bikEmailMode : "off",
     staleCodes: await countStale(shop), reapplyRunning: isRunning(shop),
     couponFrom: istDay(settings.couponStartsAt ? new Date(settings.couponStartsAt) : DEFAULT_COUPON_START),
     couponLast: istDay(new Date((settings.couponEndsAt ? new Date(settings.couponEndsAt) : DEFAULT_COUPON_END).getTime() - 1000)),
@@ -69,6 +71,15 @@ export const action = async ({ request }) => {
     if (!key) return json({ omnisendTest: { ok: false, error: "Save your Omnisend API key first, then send the test." } });
     const r = await sendTestEvent(key, email, phone);
     return json({ omnisendTest: { ok: r.ok, error: r.error || "", email } });
+  }
+  if (fd.get("emailTest")) {
+    const to = String(fd.get("emailTest")).trim().toLowerCase();
+    const st = await getSettings(shop);
+    if (!/^[^ @]+@[^ @]+[.][^ @]+$/.test(to)) return json({ emailTest: { ok: false, error: "Type a valid email address first." } });
+    if (!bikCreds(st)) return json({ emailTest: { ok: false, error: "Save your Bik key and secret first." } });
+    if (!st.bikEmailFrom) return json({ emailTest: { ok: false, error: "Save the sender address first, then send the test." } });
+    const r = await sendTestEmail(st, to);
+    return json({ emailTest: { ok: r.ok, error: r.error || "", to, id: r.id || "" } });
   }
   if (fd.get("reapplyDates")) {
     const r = await startReapply(shop, async (s) => (await unauthenticated.admin(s)).admin);
@@ -101,7 +112,7 @@ export const action = async ({ request }) => {
   const dates = { couponStartsAt: from, couponEndsAt: last ? new Date(last.getTime() + 24 * 3600 * 1000) : null };
   ops.push(prisma.gameSettings.update({ where: { shop }, data: dates }));
   // Bik (WhatsApp): key + secret are replaced only when both are typed; template ids and switches always
-  const bikData = { bikMode: ["off", "consent"].includes(data.bikMode) ? data.bikMode : "auto", bikReminders: !!data.bikReminders, bikLandingPath: cleanLanding(data.bikLandingPath), bikStoreUrl: /^https:\/\/[a-z0-9.-]+$/i.test(String(data.bikStoreUrl || "").trim().replace(/\/$/, "")) ? String(data.bikStoreUrl).trim().replace(/\/$/, "") : "https://charmacyworld.com", bikUrlFull: data.bikUrlFull !== false, bikWinTemplate: cleanId(data.bikWinTemplate), bikReminderTemplate: cleanId(data.bikReminderTemplate), bikGiftTemplate: cleanId(data.bikGiftTemplate) };
+  const bikData = { bikMode: ["off", "consent"].includes(data.bikMode) ? data.bikMode : "auto", bikReminders: !!data.bikReminders, bikEmailFrom: /^[^ @]+@[^ @]+\.[^ @]+$/.test(String(data.bikEmailFrom || "").trim()) ? String(data.bikEmailFrom).trim().toLowerCase() : null, bikEmailName: String(data.bikEmailName || "").trim().slice(0, 60) || null, bikEmailMode: ["fallback", "all"].includes(data.bikEmailMode) ? data.bikEmailMode : "off", bikLandingPath: cleanLanding(data.bikLandingPath), bikStoreUrl: /^https:\/\/[a-z0-9.-]+$/i.test(String(data.bikStoreUrl || "").trim().replace(/\/$/, "")) ? String(data.bikStoreUrl).trim().replace(/\/$/, "") : "https://charmacyworld.com", bikUrlFull: data.bikUrlFull !== false, bikWinTemplate: cleanId(data.bikWinTemplate), bikReminderTemplate: cleanId(data.bikReminderTemplate), bikGiftTemplate: cleanId(data.bikGiftTemplate) };
   if (data.bikRemoveKey) bikData.bikKeyEnc = null;
   else if (String(data.bikKey || "").trim() && String(data.bikSecret || "").trim()) bikData.bikKeyEnc = encryptCreds(data.bikKey, data.bikSecret);
   ops.push(prisma.gameSettings.update({ where: { shop }, data: bikData }));
@@ -180,6 +191,11 @@ export default function GamesAndPrizes() {
   const [bikRem, setBikRem] = useState(data.bikReminderTemplate);
   const [bikGift, setBikGift] = useState(data.bikGiftTemplate);
   const [bikPhone, setBikPhone] = useState("");
+  const [emailFrom, setEmailFrom] = useState(data.bikEmailFrom);
+  const [emailName, setEmailName] = useState(data.bikEmailName);
+  const [emailMode, setEmailMode] = useState(data.bikEmailMode);
+  const [emailTo, setEmailTo] = useState("");
+  const sendEmailTest = () => { const fd = new FormData(); fd.append("emailTest", emailTo); submit(fd, { method: "post" }); };
   const reapplyDates = () => { const fd = new FormData(); fd.append("reapplyDates", "1"); submit(fd, { method: "post" }); };
   const sendBikTest = () => { const fd = new FormData(); fd.append("bikTest", bikPhone); submit(fd, { method: "post" }); };
   const [testEmail, setTestEmail] = useState("");
@@ -243,7 +259,7 @@ export default function GamesAndPrizes() {
   });
 
   const save = () => {
-    const payload = { couponDays, requireOrder, freeGiftDailyLimit: freeLimit, spreadFreeGifts: spreadFree, giftFallback, omnisendMode: omniMode, omnisendKey: omniKey, omnisendRemoveKey: omniRemove, couponFrom, couponLast, bikKey, bikSecret, bikRemoveKey: bikRemove, bikMode, bikReminders, bikLandingPath: bikLanding, bikStoreUrl, bikUrlFull: bikUrlFull === "full", bikWinTemplate: bikWin, bikReminderTemplate: bikRem, bikGiftTemplate: bikGift, games: {} };
+    const payload = { couponDays, requireOrder, freeGiftDailyLimit: freeLimit, spreadFreeGifts: spreadFree, giftFallback, omnisendMode: omniMode, omnisendKey: omniKey, omnisendRemoveKey: omniRemove, couponFrom, couponLast, bikKey, bikSecret, bikRemoveKey: bikRemove, bikMode, bikReminders, bikEmailFrom: emailFrom, bikEmailName: emailName, bikEmailMode: emailMode, bikLandingPath: bikLanding, bikStoreUrl, bikUrlFull: bikUrlFull === "full", bikWinTemplate: bikWin, bikReminderTemplate: bikRem, bikGiftTemplate: bikGift, games: {} };
     for (const id of Object.keys(games)) payload.games[id] = { ...games[id], prizes: games[id].prizes.map(({ _k, ...p }) => p) };
     const fd = new FormData();
     fd.append("payload", JSON.stringify(payload));
@@ -259,7 +275,11 @@ export default function GamesAndPrizes() {
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
-            {result?.reapply ? (
+            {result?.emailTest ? (
+              result.emailTest.ok
+                ? <Banner tone="success" title={`Test email sent to ${result.emailTest.to}.`}>Bik accepted it. Check the inbox (and spam). If it never arrives, the sender address may not be verified in Bik.</Banner>
+                : <Banner tone="critical" title="The test email was not sent.">{result.emailTest.error}</Banner>
+            ) : result?.reapply ? (
               <Banner tone={result.reapply.already ? "info" : "success"} title={result.reapply.already ? "Already updating the codes in the background." : result.reapply.total ? `Updating ${result.reapply.total} code(s) in the background.` : "No codes need updating."}>
                 {result.reapply.total ? <Text as="p">This takes about a second per 4 codes. Reload this page in a minute: the number of codes on old dates should drop to 0.</Text> : null}
               </Banner>
@@ -344,6 +364,22 @@ export default function GamesAndPrizes() {
                       <BlockStack gap="200">
                         <TextField label="Send a test message to this mobile number" type="tel" value={bikPhone} onChange={setBikPhone} autoComplete="off" placeholder="9876543210" helpText="Uses your win template with the sample code CHMTEST5. Save first if you just changed the key or template." />
                         <InlineStack><Button onClick={sendBikTest} loading={saving} disabled={!bikPhone}>Send test WhatsApp message</Button></InlineStack>
+                      </BlockStack>
+                    ) : null}
+                  </BlockStack>
+                </div>
+                <Divider />
+                <Text as="h3" variant="headingSm">Prize email through Bik (backup for WhatsApp)</Text>
+                <div style={{ maxWidth: 560 }}>
+                  <BlockStack gap="200">
+                    <TextField label="Sender address" type="email" value={emailFrom} onChange={setEmailFrom} autoComplete="off" placeholder="carnival@yourdomain.com" helpText="Must be on a domain that is verified in Bik (Settings > Channel management > Email)." />
+                    <TextField label="Sender name" value={emailName} onChange={setEmailName} autoComplete="off" />
+                    <Select label="When to send the email" value={emailMode} onChange={setEmailMode}
+                      options={[{ label: "Off", value: "off" }, { label: "Only if WhatsApp did not reach the winner within 30 minutes", value: "fallback" }, { label: "To every winner, right away", value: "all" }]} />
+                    {data.bikEmailFrom ? (
+                      <BlockStack gap="200">
+                        <TextField label="Send a test email to" type="email" value={emailTo} onChange={setEmailTo} autoComplete="off" helpText="Save first if you just changed the sender." />
+                        <InlineStack><Button onClick={sendEmailTest} loading={saving} disabled={!emailTo}>Send test email</Button></InlineStack>
                       </BlockStack>
                     ) : null}
                   </BlockStack>

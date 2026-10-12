@@ -74,7 +74,10 @@ export function startReminderLoop() {
   setTimeout(tick, 2 * 60 * 1000);
   setInterval(tick, 30 * 60 * 1000).unref?.();
   // delivery tracking: ask Bik for the status of recent messages every 2 minutes
-  const poll = async () => { try { const { pollStatuses } = await import("./bik-poll.server"); await pollStatuses(); } catch (e) { console.error("Status poll failed:", e); } };
+  const poll = async () => {
+    try { const { pollStatuses } = await import("./bik-poll.server"); await pollStatuses(); } catch (e) { console.error("Status poll failed:", e); }
+    try { const { runEmailFallback } = await import("./email.server"); const r = await runEmailFallback(); if (r.sent) console.log("Prize emails sent:", r.sent); } catch (e) { console.error("Email fallback failed:", e); }
+  };
   setTimeout(poll, 60 * 1000);
   setInterval(poll, 2 * 60 * 1000).unref?.();
 }

@@ -55,7 +55,7 @@ export const loader = async ({ request }) => {
   const sinceDate = new Date(Date.parse(days[days.length - 1] + "T00:00:00Z") - 5.5 * 3600 * 1000);
   const [plays, logs7] = await Promise.all([
     prisma.gamePlay.findMany({ where: { shop, playedAt: { gte: sinceDate }, NOT: { orderId: { contains: "~t" } } }, select: { playedAt: true, outcomeWin: true, claimedAt: true, phone: true, waStatus: true, prizeKind: true, delivery: true } }),
-    prisma.whatsAppLog.findMany({ where: { shop, createdAt: { gte: sinceDate }, NOT: { kind: "test" } }, select: { createdAt: true, status: true } }),
+    prisma.whatsAppLog.findMany({ where: { shop, createdAt: { gte: sinceDate }, NOT: { kind: { in: ["test", "email"] } } }, select: { createdAt: true, status: true } }),
   ]);
   const orderCount = async (day) => {
     try {
@@ -87,7 +87,7 @@ export const loader = async ({ request }) => {
 
 const TONE = { accepted: "info", sent: "info", delivered: "success", read: "success", failed: "critical" };
 const LABEL = { accepted: "Handed to Bik", sent: "Sent", delivered: "Delivered", read: "Read", failed: "Failed" };
-const KIND = { win: "Win", reminder: "Reminder", gift: "Free gift", test: "Test" };
+const KIND = { win: "Win", reminder: "Reminder", gift: "Free gift", test: "Test", email: "Email" };
 
 export default function WhatsAppLogs() {
   const { items, counts, hookUrl, hasKey, hook, funnel } = useLoaderData();

@@ -70,6 +70,9 @@ model GamePlay {
   waSentAt    DateTime?
   waReminders Int       @default(0)
   waLastAt    DateTime? // last WhatsApp message (win or reminder)
+  emailStatus String?   // sent | failed
+  emailError  String?
+  emailSentAt DateTime?
   waConsentAt DateTime? // the customer tapped "send it to my WhatsApp" (consent mode)
 
   @@index([giftToken])
@@ -100,6 +103,9 @@ model GameSettings {
   bikStoreUrl String @default("https://charmacyworld.com")        // the store address used to build the full "Shop now" link
   bikUrlFull Boolean @default(true)       // true: send the whole link to Bik; false: only the part after /discount/
   bikLandingPath String @default("/collections/new-arrivals-25")  // page "Shop now" opens after the code is applied (empty = home page)
+  bikEmailFrom String? @default("carnival@info.charmacyworld.com")  // sender address for the prize email (must be on a domain verified in Bik)
+  bikEmailName String? @default("Charmacy Carnival")
+  bikEmailMode String @default("off")    // "off" | "fallback" (WhatsApp failed / no phone / not delivered in 30 min) | "all" (every winner)
   bikReminders Boolean @default(true)    // weekly reminders until the coupon is used or expires
   giftFallback String @default("pack")  // when a free product cannot be added to the order: "pack" = tag + note on the order, "code" = personal 100% code (one play per order)
 }
