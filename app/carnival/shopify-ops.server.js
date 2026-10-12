@@ -223,3 +223,21 @@ export async function codeUsage(admin, code) {
     return { ok: false };
   }
 }
+
+// Moves an already issued personal code to a new start / end date. { ok, gone, error }
+export async function updateCodeWindow(admin, code, startsAt, endsAt) {
+  if (!admin || !code) return { ok: false, error: "no admin session" };
+  try {
+    const f = await gql(admin, `#graphql\nquery u($c: String!) { codeDiscountNodeByCode(code: $c) { id } }`, { c: code });
+    const id = f?.data?.codeDiscountNodeByCode?.id;
+    if (!id) return { ok: false, gone: !f?.errors, error: "code not found in Shopify" };
+    const d = await gql(admin,
+      `#graphql\nmutation u($id: ID!, $input: DiscountCodeBasicInput!) { discountCodeBasicUpdate(id: $id, basicCodeDiscount: $input) { codeDiscountNode { id } userErrors { message } } }`,
+      { id, input: { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() } });
+    const r = d?.data?.discountCodeBasicUpdate;
+    if (r?.codeDiscountNode?.id) return { ok: true };
+    return { ok: false, error: r?.userErrors?.[0]?.message || JSON.stringify(d?.errors || "update failed") };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}

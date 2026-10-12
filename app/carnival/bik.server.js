@@ -64,7 +64,7 @@ export async function sendTemplate(creds, { to, templateId, body, button, callba
 }
 
 // ---- the three messages ----
-const validText = (w) => (w.startsAt.getTime() > Date.now() + 3600000 ? `${lastDayText(w.endsAt)} (active from ${startDayText(w.startsAt)})` : lastDayText(w.endsAt));
+const validText = (w) => (w.startsAt.getTime() > Date.now() + 3600000 ? `${lastDayText(w.endsAt)} (applicable from ${startDayText(w.startsAt)})` : lastDayText(w.endsAt));
 // Order must match the template in Bik: Copy coupon code first, Shop Now (link) second. sendTemplate swaps them if Bik says otherwise.
 // The link button's variable is the end of ".../discount/{{1}}": the code, plus "?redirect=/collections/all" to land on the products page.
 // landingPath comes from the admin setting (for example /collections/new-arrivals-25); empty = just apply the code.
@@ -123,4 +123,21 @@ export async function sendTestMessage(settings, to) {
     to, templateId: settings.bikWinTemplate, body: ["10% OFF Coupon", "CHMTEST5", lastDayText(w.endsAt)], button: codeButtons("CHMTEST5", settings),
     callbackData: { kind: "test" },
   });
+}
+
+// Asks Bik for the current status of messages (POST fetchMessagesById). Returns { ok, messages: [{ messageId, status, failureReason, createdAt }] }.
+export async function fetchStatuses(creds, ids) {
+  if (!creds || !ids.length) return { ok: false, error: "nothing to check", messages: [] };
+  const auth = "Basic " + Buffer.from(`${creds.key}:${creds.secret}`).toString("base64");
+  try {
+    const res = await fetch("https://bikapi.bikayi.app/integrations/bikPlatformFunctions-fetchMessagesById", {
+      method: "POST", headers: { Authorization: auth, "Content-Type": "application/json" }, body: JSON.stringify({ messageIds: ids }),
+    });
+    const j = await res.json().catch(() => null);
+    if (!res.ok || !j) return { ok: false, error: `Bik ${res.status}`, messages: [] };
+    const list = Array.isArray(j.data) ? j.data : Array.isArray(j.data && j.data.messages) ? j.data.messages : [];
+    return { ok: true, messages: list.filter((m) => m && m.messageId) };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e), messages: [] };
+  }
 }

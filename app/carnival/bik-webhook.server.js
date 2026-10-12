@@ -31,6 +31,28 @@ async function findLog(shop, info) {
   });
 }
 
+// Applies one reported status to a log row (never moves a message backwards). Returns true when something changed.
+export async function applyStatusUpdate(shop, log, statusRaw, failureReason, at = new Date(), messageId = null) {
+  const status = String(statusRaw || "").toLowerCase();
+  const data = {};
+  if (!log.messageId && messageId) data.messageId = String(messageId);
+  if (status === "failed") {
+    if ((RANK[log.status] ?? 0) >= 2) return false;                 // already delivered: ignore a late failure
+    Object.assign(data, { status: "failed", failedAt: at, error: String(failureReason || "Message failed").slice(0, 400) });
+  } else if (status in RANK && status !== "accepted") {
+    if (RANK[status] > (RANK[log.status] ?? -1) && log.status !== "failed") data.status = status;
+    if (status === "sent" && !log.sentAt) data.sentAt = at;
+    if (status === "delivered" && !log.deliveredAt) data.deliveredAt = at;
+    if (status === "read" && !log.readAt) data.readAt = at;
+  }
+  if (!Object.keys(data).length) return false;
+  await prisma.whatsAppLog.update({ where: { id: log.id }, data });
+  if (data.status === "failed" && log.orderId) {                   // stop reminders to a number that cannot receive them
+    await prisma.gamePlay.updateMany({ where: { orderId: log.orderId, shop }, data: { waStatus: "failed", waError: data.error } });
+  }
+  return true;
+}
+
 // events: the array Bik posts. Returns how many log rows changed.
 export async function handleBikEvents(shop, events) {
   let changed = 0;
@@ -42,24 +64,7 @@ export async function handleBikEvents(shop, events) {
       if (name === "message-status-update") {
         const log = await findLog(shop, info);
         if (!log) continue;
-        const status = String(info.status || "").toLowerCase();
-        const data = {};
-        if (!log.messageId && info.messageId) data.messageId = String(info.messageId);
-        if (status === "failed") {
-          if ((RANK[log.status] ?? 0) >= 2) continue;                 // already delivered: ignore a late failure
-          Object.assign(data, { status: "failed", failedAt: at, error: String(info.failureReason || "Message failed").slice(0, 400) });
-        } else if (status in RANK && status !== "accepted") {
-          if (RANK[status] > (RANK[log.status] ?? -1) && log.status !== "failed") data.status = status;
-          if (status === "sent" && !log.sentAt) data.sentAt = at;
-          if (status === "delivered" && !log.deliveredAt) data.deliveredAt = at;
-          if (status === "read" && !log.readAt) data.readAt = at;
-        }
-        if (!Object.keys(data).length) continue;
-        await prisma.whatsAppLog.update({ where: { id: log.id }, data });
-        changed++;
-        if (data.status === "failed" && log.orderId) {                 // stop reminders to a number that cannot receive them
-          await prisma.gamePlay.updateMany({ where: { orderId: log.orderId, shop }, data: { waStatus: "failed", waError: data.error } });
-        }
+        if (await applyStatusUpdate(shop, log, info.status, info.failureReason, at, info.messageId)) changed++;
       } else if (name === "linkClicked") {
         const log = await findLog(shop, { messageId: info.messageId });
         if (log && !log.clickedAt) { await prisma.whatsAppLog.update({ where: { id: log.id }, data: { clickedAt: info.clickedAt && !isNaN(new Date(info.clickedAt)) ? new Date(info.clickedAt) : at } }); changed++; }

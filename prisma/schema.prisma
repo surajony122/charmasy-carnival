@@ -94,6 +94,8 @@ model GameSettings {
   bikReminderTemplate String?
   bikGiftTemplate String?
   bikMode String @default("auto")        // "off" | "auto" (every win) | "consent" (only when the customer taps "send it to my WhatsApp")
+  bikHookLastAt DateTime?                // last time Bik called our status webhook (any result)
+  bikHookLastResult String?              // ok | wrong key | bad body
   bikWebhookKeyEnc String?               // key Bik sends with its status webhooks (encrypted)
   bikStoreUrl String @default("https://charmacyworld.com")        // the store address used to build the full "Shop now" link
   bikUrlFull Boolean @default(true)       // true: send the whole link to Bik; false: only the part after /discount/

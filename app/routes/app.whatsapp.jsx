@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { encryptKey, decryptKey } from "../carnival/omnisend.server";
+import { pollStatuses } from "../carnival/bik-poll.server";
 
 const handleOf = (shop) => String(shop).replace(/\.myshopify\.com$/, "");
 const appUrl = () => (process.env.SHOPIFY_APP_URL || "https://charmasy-carnival.onrender.com").replace(/\/$/, "");
@@ -17,6 +18,10 @@ export const action = async ({ request }) => {
     const key = randomBytes(18).toString("base64url");
     await prisma.gameSettings.upsert({ where: { shop: session.shop }, update: { bikWebhookKeyEnc: encryptKey(key) }, create: { shop: session.shop, bikWebhookKeyEnc: encryptKey(key) } });
     return json({ newKey: key });
+  }
+  if (fd.get("intent") === "refresh") {
+    const r = await pollStatuses({ shop: session.shop });
+    return json({ refreshed: r });
   }
   return json({ ok: true });
 };
@@ -48,6 +53,7 @@ export const loader = async ({ request }) => {
     items, counts: { total: items.length, accepted: count("accepted"), sent: count("sent"), delivered: count("delivered"), read: count("read"), failed: count("failed") },
     hookUrl: `${appUrl()}/webhooks/bik?shop=${shop}`,
     hasKey: !!(settings && settings.bikWebhookKeyEnc && decryptKey(settings.bikWebhookKeyEnc)),
+    hook: settings && settings.bikHookLastAt ? { at: new Date(settings.bikHookLastAt.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " "), result: settings.bikHookLastResult || "" } : null,
   });
 };
 
@@ -56,18 +62,25 @@ const LABEL = { accepted: "Handed to Bik", sent: "Sent", delivered: "Delivered",
 const KIND = { win: "Win", reminder: "Reminder", gift: "Free gift", test: "Test" };
 
 export default function WhatsAppLogs() {
-  const { items, counts, hookUrl, hasKey } = useLoaderData();
+  const { items, counts, hookUrl, hasKey, hook } = useLoaderData();
   const result = useActionData();
   const submit = useSubmit();
   const busy = useNavigation().state === "submitting";
   const [status, setStatus] = useState("all");
   const [kind, setKind] = useState("all");
   const shown = items.filter((i) => (status === "all" || i.status === status) && (kind === "all" || i.kind === kind));
+  const refresh = () => { const fd = new FormData(); fd.append("intent", "refresh"); submit(fd, { method: "post" }); };
   const makeKey = () => { const fd = new FormData(); fd.append("intent", "makeKey"); submit(fd, { method: "post" }); };
 
   return (
-    <Page title="WhatsApp messages" subtitle="Every message handed to Bik, with its delivery tracking (India time).">
+    <Page title="WhatsApp messages" subtitle="Every message handed to Bik, with its delivery tracking (India time)."
+      primaryAction={{ content: "Refresh status from Bik", onAction: refresh, loading: busy }}>
       <BlockStack gap="400">
+        {result?.refreshed ? (
+          <Banner tone={result.refreshed.error ? "critical" : "success"} title={result.refreshed.error ? "Bik could not be asked" : `Checked ${result.refreshed.checked} message(s) with Bik, ${result.refreshed.changed} updated.`}>
+            {result.refreshed.error ? <Text as="p">{result.refreshed.error}</Text> : <Text as="p">Statuses also refresh by themselves every 2 minutes.</Text>}
+          </Banner>
+        ) : null}
         <Card>
           <InlineStack gap="400" wrap>
             {[["Total", counts.total, "info"], ["Delivered", counts.delivered, "success"], ["Read", counts.read, "success"], ["Failed", counts.failed, "critical"]].map(([l, n, tone]) => (
@@ -88,7 +101,7 @@ export default function WhatsAppLogs() {
           </Banner>
         ) : (
           <Banner tone="info" title="Delivery tracking is set up">
-            <Text as="p">Webhook URL for Bik: {hookUrl}. Lost the key? <Link onClick={makeKey}>Create a new one</Link> (then update it in Bik).</Text>
+            <Text as="p">Last call from Bik: {hook ? `${hook.at} (${hook.result})` : "never"}. Webhook URL for Bik: {hookUrl}. Lost the key? <Link onClick={makeKey}>Create a new one</Link> (then update it in Bik).</Text>
           </Banner>
         )}
 

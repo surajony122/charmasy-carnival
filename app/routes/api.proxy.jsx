@@ -229,7 +229,7 @@ async function handleClaim(ctx, fd) {
 
   const customerGid = await upsertCustomer(admin, email, phone);
   const days = settings.couponDays || 7;
-  const win = couponWindow(settings, { testMode: adminTest });     // when the personal code works (from 21 Oct for 30 days)
+  const win = couponWindow(settings, { testMode: adminTest });     // when the personal code works (from 1 Nov to 30 Nov)
   let delivery = null, code = null, note = "", unique = false, editError = "";
 
   if (prize.kind === "FREE_PRODUCT") {

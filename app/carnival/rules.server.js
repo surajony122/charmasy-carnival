@@ -48,10 +48,12 @@ export function activeGameFor(settings, now = Date.now()) {
   return 0;
 }
 
-// The window in which a won personal code can be used. Default for this campaign: from 21 Oct 2026 00:00 IST for 30 days
-// (until the end of 19 Nov). Test Mode codes work immediately so they can be tried before the campaign.
-export const DEFAULT_COUPON_START = new Date(Date.UTC(2026, 9, 21) - 5.5 * 3600 * 1000);
-export const DEFAULT_COUPON_END = new Date(Date.UTC(2026, 10, 20) - 5.5 * 3600 * 1000);
+// The window in which a won personal code can be used. Default for this campaign: from 1 Nov 2026 00:00 IST until the end of
+// 30 Nov. Test Mode codes work immediately so they can be tried before the campaign.
+export const DEFAULT_COUPON_START = new Date(Date.UTC(2026, 10, 1) - 5.5 * 3600 * 1000);
+export const DEFAULT_COUPON_END = new Date(Date.UTC(2026, 11, 1) - 5.5 * 3600 * 1000);
+// The first plan was 21 Oct - 19 Nov. If those exact dates are still saved, they count as "not chosen" so the new default applies.
+const OLD_START = Date.UTC(2026, 9, 21) - 5.5 * 3600 * 1000, OLD_END = Date.UTC(2026, 10, 20) - 5.5 * 3600 * 1000;
 export function couponWindow(settings, { testMode = false, now = Date.now() } = {}) {
   const planned = settings && settings.couponStartsAt ? new Date(settings.couponStartsAt) : DEFAULT_COUPON_START;
   const startsAt = testMode ? new Date(now) : new Date(Math.max(planned.getTime(), now - 60000));
@@ -61,7 +63,7 @@ export function couponWindow(settings, { testMode = false, now = Date.now() } = 
   }
   return { startsAt, endsAt };
 }
-// "19 Nov 2026" - the last day the code works (the window ends at 00:00 IST of the next day)
+// "30 Nov 2026" - the last day the code works (the window ends at 00:00 IST of the next day)
 export function lastDayText(endsAt) {
   return new Date(endsAt.getTime() - 1000 + 5.5 * 3600 * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
@@ -75,6 +77,10 @@ export async function getSettings(shop) {
     if (shop) st = await prisma.gameSettings.findUnique({ where: { shop } });   // each store has its own settings
   } catch (e) {
     console.error("Failed to read settings:", e);
+  }
+  if (st && st.couponStartsAt && st.couponEndsAt && new Date(st.couponStartsAt).getTime() === OLD_START && new Date(st.couponEndsAt).getTime() === OLD_END) {
+    st = { ...st, couponStartsAt: null, couponEndsAt: null };
+    prisma.gameSettings.update({ where: { shop }, data: { couponStartsAt: null, couponEndsAt: null } }).catch(() => {});
   }
   return st || { testMode: false, manualActive: false, activeGameId: 1, couponDays: 7, requireOrder: true, freeGiftDailyLimit: 6, spreadFreeGifts: true };
 }

@@ -13,6 +13,8 @@ import { normalizePhone } from "../carnival/shopify-ops.server";
 import { encryptKey, omnisendConfigured, keyHint, resolveKey, sendTestEvent } from "../carnival/omnisend.server";
 import { bikCreds, bikHint, encryptCreds, sendTestMessage, cleanLanding } from "../carnival/bik.server";
 import { DEFAULT_COUPON_START, DEFAULT_COUPON_END } from "../carnival/rules.server";
+import { countStale, startReapply, isRunning } from "../carnival/recode.server";
+import { unauthenticated } from "../shopify.server";
 
 // India-time day <-> Date helpers for the coupon dates (a day is 00:00 IST to 00:00 IST)
 const istDay = (d) => new Date(d.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
@@ -42,6 +44,7 @@ export const loader = async ({ request }) => {
     };
   }
   return json({ games, couponDays: settings.couponDays ?? 7, requireOrder: settings.requireOrder !== false, freeGiftDailyLimit: settings.freeGiftDailyLimit ?? 6, spreadFreeGifts: settings.spreadFreeGifts !== false, giftFallback: settings.giftFallback === "code" ? "code" : "pack", omnisendMode: ["off", "button"].includes(settings.omnisendMode) ? settings.omnisendMode : "auto", omnisendKey: omnisendConfigured(settings), omnisendKeyHint: keyHint(settings),
+    staleCodes: await countStale(shop), reapplyRunning: isRunning(shop),
     couponFrom: istDay(settings.couponStartsAt ? new Date(settings.couponStartsAt) : DEFAULT_COUPON_START),
     couponLast: istDay(new Date((settings.couponEndsAt ? new Date(settings.couponEndsAt) : DEFAULT_COUPON_END).getTime() - 1000)),
     bikKey: !!bikCreds(settings), bikHint: bikHint(settings), bikMode: ["off", "consent"].includes(settings.bikMode) ? settings.bikMode : "auto", bikLandingPath: settings.bikLandingPath ?? "/collections/new-arrivals-25", bikStoreUrl: settings.bikStoreUrl || "https://charmacyworld.com", bikUrlFull: settings.bikUrlFull !== false, bikReminders: settings.bikReminders !== false,
@@ -66,6 +69,10 @@ export const action = async ({ request }) => {
     if (!key) return json({ omnisendTest: { ok: false, error: "Save your Omnisend API key first, then send the test." } });
     const r = await sendTestEvent(key, email, phone);
     return json({ omnisendTest: { ok: r.ok, error: r.error || "", email } });
+  }
+  if (fd.get("reapplyDates")) {
+    const r = await startReapply(shop, async (s) => (await unauthenticated.admin(s)).admin);
+    return json({ reapply: { started: !!r.started, already: !!r.already, total: r.total || 0 } });
   }
   if (fd.get("bikTest")) {
     const to = normalizePhone(String(fd.get("bikTest")));
@@ -173,6 +180,7 @@ export default function GamesAndPrizes() {
   const [bikRem, setBikRem] = useState(data.bikReminderTemplate);
   const [bikGift, setBikGift] = useState(data.bikGiftTemplate);
   const [bikPhone, setBikPhone] = useState("");
+  const reapplyDates = () => { const fd = new FormData(); fd.append("reapplyDates", "1"); submit(fd, { method: "post" }); };
   const sendBikTest = () => { const fd = new FormData(); fd.append("bikTest", bikPhone); submit(fd, { method: "post" }); };
   const [testEmail, setTestEmail] = useState("");
   const [testPhone, setTestPhone] = useState("");
@@ -251,7 +259,11 @@ export default function GamesAndPrizes() {
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
-            {result?.bikTest ? (
+            {result?.reapply ? (
+              <Banner tone={result.reapply.already ? "info" : "success"} title={result.reapply.already ? "Already updating the codes in the background." : result.reapply.total ? `Updating ${result.reapply.total} code(s) in the background.` : "No codes need updating."}>
+                {result.reapply.total ? <Text as="p">This takes about a second per 4 codes. Reload this page in a minute: the number of codes on old dates should drop to 0.</Text> : null}
+              </Banner>
+            ) : result?.bikTest ? (
               result.bikTest.ok
                 ? <Banner tone="success" title={`WhatsApp test message sent to ${result.bikTest.to}.`}>Bik accepted it{result.bikTest.id ? ` (message id ${result.bikTest.id})` : ""}. Check that phone. If nothing arrives, look for this number or message id in Bik, in the inbox / message reports, and read the delivery status or error there.</Banner>
                 : <Banner tone="critical" title="The WhatsApp test message was not sent.">{result.bikTest.error}</Banner>
@@ -281,6 +293,14 @@ export default function GamesAndPrizes() {
                     <TextField label="Coupons work until the end of" type="date" value={couponLast} onChange={setCouponLast} autoComplete="off" helpText="Last day the code is valid." />
                   </div>
                 </InlineStack>
+                {data.staleCodes > 0 ? (
+                  <Banner tone="warning" title={`${data.staleCodes} code(s) already issued still have different dates`}>
+                    <BlockStack gap="200">
+                      <Text as="p">Codes that customers already won keep the dates they were created with. Save the dates above first, then move the unused codes to them.</Text>
+                      <InlineStack><Button onClick={reapplyDates} loading={saving || data.reapplyRunning}>Apply these dates to codes already issued</Button></InlineStack>
+                    </BlockStack>
+                  </Banner>
+                ) : null}
                 <Text as="p" variant="bodySm" tone="subdued">Won codes combine with your automatic store discount (your automatic discount must also allow combining). If these dates have passed, codes fall back to "valid for X days" below.</Text>
                 <InlineStack gap="400" wrap>
                   <div style={{ width: 260 }}>
