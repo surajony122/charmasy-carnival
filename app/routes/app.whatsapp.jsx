@@ -27,7 +27,7 @@ export const action = async ({ request }) => {
 };
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   const [logs, settings] = await Promise.all([
     prisma.whatsAppLog.findMany({ where: { shop }, orderBy: { createdAt: "desc" }, take: 500 }),
@@ -48,10 +48,38 @@ export const loader = async ({ request }) => {
       day: new Date(l.createdAt.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10),
     };
   });
+  // Day-by-day funnel (India time): orders -> plays -> wins -> claimed -> phone -> handed to Bik -> delivered / failed
+  const ist = (d) => new Date(d.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  const days = [];
+  for (let i = 0; i < 7; i++) days.push(ist(new Date(Date.now() - i * 86400000)));
+  const sinceDate = new Date(Date.parse(days[days.length - 1] + "T00:00:00Z") - 5.5 * 3600 * 1000);
+  const [plays, logs7] = await Promise.all([
+    prisma.gamePlay.findMany({ where: { shop, playedAt: { gte: sinceDate }, NOT: { orderId: { contains: "~t" } } }, select: { playedAt: true, outcomeWin: true, claimedAt: true, phone: true, waStatus: true, prizeKind: true, delivery: true } }),
+    prisma.whatsAppLog.findMany({ where: { shop, createdAt: { gte: sinceDate }, NOT: { kind: "test" } }, select: { createdAt: true, status: true } }),
+  ]);
+  const orderCount = async (day) => {
+    try {
+      const from = new Date(Date.parse(day + "T00:00:00Z") - 5.5 * 3600 * 1000).toISOString(), to = new Date(Date.parse(day + "T00:00:00Z") - 5.5 * 3600 * 1000 + 86400000).toISOString();
+      const r = await admin.graphql(`#graphql\nquery c($q: String!) { ordersCount(query: $q) { count } }`, { variables: { q: `created_at:>=${from} created_at:<${to}` } });
+      const j = await r.json();
+      return j?.data?.ordersCount?.count ?? null;
+    } catch (e) { return null; }
+  };
+  const orders = await Promise.all(days.map(orderCount));
+  const funnel = days.map((day, i) => {
+    const p = plays.filter((x) => ist(x.playedAt) === day), l = logs7.filter((x) => ist(x.createdAt) === day);
+    const claimed = p.filter((x) => x.claimedAt);
+    return {
+      day, orders: orders[i], plays: p.length, wins: p.filter((x) => x.outcomeWin).length, claimed: claimed.length,
+      noPhone: claimed.filter((x) => !x.phone).length, handed: l.length,
+      delivered: l.filter((x) => x.status === "delivered" || x.status === "read").length, failed: l.filter((x) => x.status === "failed").length,
+      noMessage: claimed.filter((x) => x.phone && !x.waStatus).length,
+    };
+  });
   const count = (st) => items.filter((i) => i.status === st).length;
   return json({
     items, counts: { total: items.length, accepted: count("accepted"), sent: count("sent"), delivered: count("delivered"), read: count("read"), failed: count("failed") },
-    hookUrl: `${appUrl()}/webhooks/bik?shop=${shop}`,
+    funnel, hookUrl: `${appUrl()}/webhooks/bik?shop=${shop}`,
     hasKey: !!(settings && settings.bikWebhookKeyEnc && decryptKey(settings.bikWebhookKeyEnc)),
     hook: settings && settings.bikHookLastAt ? { at: new Date(settings.bikHookLastAt.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " "), result: settings.bikHookLastResult || "" } : null,
   });
@@ -62,7 +90,7 @@ const LABEL = { accepted: "Handed to Bik", sent: "Sent", delivered: "Delivered",
 const KIND = { win: "Win", reminder: "Reminder", gift: "Free gift", test: "Test" };
 
 export default function WhatsAppLogs() {
-  const { items, counts, hookUrl, hasKey, hook } = useLoaderData();
+  const { items, counts, hookUrl, hasKey, hook, funnel } = useLoaderData();
   const result = useActionData();
   const submit = useSubmit();
   const busy = useNavigation().state === "submitting";
@@ -78,7 +106,12 @@ export default function WhatsAppLogs() {
       <BlockStack gap="400">
         {result?.refreshed ? (
           <Banner tone={result.refreshed.error ? "critical" : "success"} title={result.refreshed.error ? "Bik could not be asked" : `Checked ${result.refreshed.checked} message(s) with Bik, ${result.refreshed.changed} updated.`}>
-            {result.refreshed.error ? <Text as="p">{result.refreshed.error}</Text> : <Text as="p">Statuses also refresh by themselves every 2 minutes.</Text>}
+            {result.refreshed.error ? <Text as="p">{result.refreshed.error}</Text> : (
+              <BlockStack gap="100">
+                <Text as="p">Bik did not know {result.refreshed.notFound} of them yet. What Bik answered for the rest: {Object.keys(result.refreshed.byStatus || {}).length ? Object.entries(result.refreshed.byStatus).map(([k, v]) => `${k} ${v}`).join(", ") : "nothing"}.</Text>
+                <Text as="p" tone="subdued">Statuses also refresh by themselves every 2 minutes.</Text>
+              </BlockStack>
+            )}
           </Banner>
         ) : null}
         <Card>
@@ -104,6 +137,18 @@ export default function WhatsAppLogs() {
             <Text as="p">Last call from Bik: {hook ? `${hook.at} (${hook.result})` : "never"}. Webhook URL for Bik: {hookUrl}. Lost the key? <Link onClick={makeKey}>Create a new one</Link> (then update it in Bik).</Text>
           </Banner>
         )}
+
+        <Card>
+          <BlockStack gap="200">
+            <Text as="h2" variant="headingMd">Where customers drop out, day by day</Text>
+            <Text as="p" variant="bodySm" tone="subdued">Orders in Shopify → opened the game and played → won → claimed the prize → had a phone number → message handed to Bik → delivered. "Claimed, no message" means a winner with a phone for whom no message was tried.</Text>
+            <DataTable
+              columnContentTypes={["text", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric"]}
+              headings={["Day", "Orders", "Played", "Won", "Claimed", "No phone", "Claimed, no message", "Handed to Bik", "Delivered / read", "Failed"]}
+              rows={funnel.map((f) => [f.day, f.orders ?? "?", f.plays, f.wins, f.claimed, f.noPhone, f.noMessage, f.handed, f.delivered, f.failed])}
+            />
+          </BlockStack>
+        </Card>
 
         <Card>
           <BlockStack gap="300">

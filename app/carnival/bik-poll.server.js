@@ -4,10 +4,13 @@ import { bikCreds, fetchStatuses } from "./bik.server";
 import { applyStatusUpdate } from "./bik-webhook.server";
 
 const OPEN = ["accepted", "sent"];
+// Bik's own words for the same thing
+const ALIAS = { undelivered: "failed", error: "failed", rejected: "failed", submitted: "sent", enqueued: "accepted", queued: "accepted", pending: "accepted", seen: "read" };
+const norm = (s) => { const x = String(s || "").toLowerCase().trim(); return ALIAS[x] || x; };
 
 // Checks open messages of one shop (or every shop with Bik credentials). Returns { checked, changed }.
 export async function pollStatuses({ shop = null, now = Date.now(), limit = 200 } = {}) {
-  const out = { checked: 0, changed: 0, error: "" };
+  const out = { checked: 0, changed: 0, error: "", notFound: 0, byStatus: {} };
   const shops = await prisma.gameSettings.findMany({ where: { bikKeyEnc: { not: null }, ...(shop ? { shop } : {}) } });
   for (const settings of shops) {
     const creds = bikCreds(settings);
@@ -24,9 +27,10 @@ export async function pollStatuses({ shop = null, now = Date.now(), limit = 200 
       const byId = new Map(r.messages.map((m) => [String(m.messageId), m]));
       for (const log of batch) {
         const m = byId.get(String(log.messageId));
-        if (!m || !m.status) continue;
+        if (!m || !m.status) { out.notFound++; continue; }
+        out.byStatus[String(m.status)] = (out.byStatus[String(m.status)] || 0) + 1;
         const at = m.createdAt && !isNaN(new Date(m.createdAt)) ? new Date(m.createdAt) : new Date(now);
-        if (await applyStatusUpdate(settings.shop, log, m.status, m.failureReason, new Date(now) > at ? new Date(now) : at)) out.changed++;
+        if (await applyStatusUpdate(settings.shop, log, norm(m.status), m.failureReason, new Date(now) > at ? new Date(now) : at)) out.changed++;
       }
     }
   }
