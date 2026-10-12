@@ -19,13 +19,19 @@ export const emailReady = (settings) => !!(bikCreds(settings) && settings.bikEma
 export function buildEmail(settings, play, productTitle) {
   const base = storeBase(settings.bikStoreUrl);
   const free = play.prizeKind === "FREE_PRODUCT";
-  const wrap = (heading, inner, buttons) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffe3ee;margin:0;padding:0;"><tr><td align="center" style="padding:16px 8px;">
+  // Carnival look without images or emoji: bunting from coloured triangle characters, pink header band, ticket-style code box, candy-stripe bar.
+  const BUNT = ["#ff5c97", "#ffc93c", "#14b8a6", "#e11d63"];
+  const bunting = BUNT.concat(BUNT, BUNT, BUNT).slice(0, 12).map((c) => `<td align="center" style="color:${c};font-size:20px;line-height:22px;padding:0;">&#9660;</td>`).join("");
+  const stripes = Array.from({ length: 24 }, (_, k) => `<td style="background:${k % 2 ? "#ffffff" : "#e11d63"};height:10px;font-size:0;line-height:0;">&nbsp;</td>`).join("");
+  const wrap = (heading, sub, inner, buttons) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffe3ee;margin:0;padding:0;"><tr><td align="center" style="padding:16px 8px;">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#fff6ec;border-radius:16px;overflow:hidden;border:2px solid #e11d63;">
-<tr><td align="center" style="background:#fff6ec;border-bottom:3px solid #e11d63;padding:16px 12px 14px 12px;"><img src="${appUrl()}/carnival/img/logo.png" alt="Charmacy" width="130" style="display:block;border:0;width:130px;max-width:60%;height:auto;"></td></tr>
-<tr><td align="center" style="padding:24px 16px 6px 16px;font-family:Arial,Helvetica,sans-serif;"><div style="font-size:46px;line-height:50px;">${free ? "&#127873;" : "&#127881;"}</div><div style="font-size:26px;line-height:32px;font-weight:bold;color:#a10f4d;margin-top:4px;">${heading}</div></td></tr>
+<tr><td style="background:#fff6ec;padding:6px 8px 0 8px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${bunting}</tr></table></td></tr>
+<tr><td align="center" style="background:#e11d63;padding:16px 12px 14px 12px;font-family:Arial,Helvetica,sans-serif;"><div style="font-size:26px;line-height:30px;font-weight:bold;letter-spacing:5px;color:#ffffff;">CHARMACY</div><div style="font-size:12px;letter-spacing:4px;color:#ffc93c;margin-top:3px;font-weight:bold;">MILANO &middot; CARNIVAL 2026</div></td></tr>
+<tr><td align="center" style="padding:26px 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;"><span style="display:inline-block;background:#ffc93c;color:#a10f4d;font-size:13px;font-weight:bold;letter-spacing:3px;padding:6px 16px;border-radius:20px;">${sub}</span><div style="font-size:34px;line-height:40px;font-weight:bold;color:#e11d63;margin-top:12px;letter-spacing:1px;">${heading}</div></td></tr>
 ${inner}
-<tr><td align="center" style="padding:18px 16px 24px 16px;">${buttons}</td></tr>
-<tr><td align="center" style="padding:0 16px 22px 16px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#7a3a55;">Charmacy Carnival 2026</td></tr>
+<tr><td align="center" style="padding:20px 16px 22px 16px;">${buttons}</td></tr>
+<tr><td style="padding:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${stripes}</tr></table></td></tr>
+<tr><td align="center" style="padding:14px 16px 20px 16px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#7a3a55;">You are receiving this email because you placed an order${play.orderName ? " (" + esc(play.orderName) + ")" : ""} at Charmacy and played the Charmacy Carnival game. This is a one-time message about your prize.<br>Charmacy Milano &middot; charmacyworld.com</td></tr>
 </table></td></tr></table>`;
   const btn = (href, label) => `<a href="${esc(href)}" target="_blank" style="display:inline-block;background:#e11d63;color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;text-decoration:none;padding:14px 28px;border-radius:30px;border-bottom:4px solid #a10f4d;margin:4px;">${esc(label)}</a>`;
   const para = (html) => `<tr><td align="center" style="padding:10px 16px 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#4a0f2b;">${html}</td></tr>`;
@@ -38,8 +44,8 @@ ${inner}
     const gift = play.giftToken ? `${base}/apps/carnival-games?gift=${encodeURIComponent(play.giftToken)}` : "";
     const status = safeHttps(play.orderStatusUrl);
     return {
-      subject: `\u{1F381} You won a FREE ${title}!`,
-      html: wrap("You won a FREE gift!", para(`Congratulations! You won a FREE <b>${esc(title)}</b> at Charmacy Carnival 2026.`) + para(how),
+      subject: `Your free ${title} from Charmacy Carnival`,
+      html: wrap("YOUR FREE GIFT", "CONGRATULATIONS", para(`Congratulations! You won a FREE <b>${esc(title)}</b> at Charmacy Carnival 2026.`) + para(how),
         (gift ? btn(gift, "VIEW MY GIFT") : "") + (status ? btn(status, "VIEW MY ORDER") : "")),
     };
   }
@@ -47,12 +53,12 @@ ${inner}
   const from = play.couponStartsAt && new Date(play.couponStartsAt).getTime() > Date.now() + 3600000 ? startDayText(new Date(play.couponStartsAt)) : "";
   const land = cleanLanding(settings.bikLandingPath);
   const shop = `${base}/discount/${encodeURIComponent(play.couponCode || "")}${land ? "?redirect=" + land : ""}`;
-  const code = `<tr><td align="center" style="padding:16px 16px 6px 16px;font-family:Arial,Helvetica,sans-serif;"><div style="font-size:12px;letter-spacing:2px;color:#a10f4d;">YOUR PERSONAL CODE</div>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;width:100%;max-width:340px;"><tr><td align="center" style="background:#ffffff;border:2px dashed #e11d63;border-radius:12px;padding:14px 8px;font-family:'Courier New',Courier,monospace;font-size:24px;line-height:30px;letter-spacing:2px;font-weight:bold;color:#a10f4d;word-break:break-all;">${esc(play.couponCode || "")}</td></tr></table>
+  const code = `<tr><td align="center" style="padding:14px 16px 6px 16px;font-family:Arial,Helvetica,sans-serif;"><div style="font-size:12px;letter-spacing:3px;color:#a10f4d;font-weight:bold;">YOUR CARNIVAL TICKET &middot; ONE ENTRY</div>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;width:100%;max-width:360px;"><tr><td align="center" style="background:#ffffff;border:3px dashed #e11d63;border-radius:14px;padding:16px 8px;font-family:'Courier New',Courier,monospace;font-size:26px;line-height:32px;letter-spacing:3px;font-weight:bold;color:#a10f4d;word-break:break-all;">${esc(play.couponCode || "")}</td></tr></table>
 <div style="font-size:13px;line-height:20px;color:#4a0f2b;margin-top:10px;">Single use, made just for you.${from ? ` Applicable from <b>${esc(from)}</b> to <b>${esc(lastDay)}</b>.` : lastDay ? ` Valid till <b>${esc(lastDay)}</b>.` : ""}</div></td></tr>`;
   return {
-    subject: `\u{1F389} You won ${play.prizeLabel || "a coupon"}! Your Charmacy Carnival code is inside`,
-    html: wrap("You won!", para(`Congratulations! You won <span style="font-size:21px;font-weight:bold;color:#e11d63;">${esc(play.prizeLabel || "")}</span> at Charmacy Carnival 2026.`) + code, btn(shop, "SHOP NOW")),
+    subject: `Your Charmacy Carnival prize: ${play.prizeLabel || "your coupon"}`,
+    html: wrap("YOU WON!", "CONGRATULATIONS", para(`Congratulations! You won <span style="font-size:21px;font-weight:bold;color:#e11d63;">${esc(play.prizeLabel || "")}</span> at Charmacy Carnival 2026.`) + code, btn(shop, "SHOP NOW")),
   };
 }
 
@@ -95,6 +101,7 @@ export function notifyEmail(settings, play, productTitle) {
 // Fallback mode: winners whose WhatsApp did not arrive within 30 minutes (or could not be tried) get the email.
 export async function runEmailFallback({ now = Date.now(), limit = 100 } = {}) {
   const out = { sent: 0, checked: 0 };
+  limit = Math.min(limit, 30);                        // a new sender is warmed up gradually: at most 30 emails per run (every 2 minutes)
   const shops = await prisma.gameSettings.findMany({ where: { bikEmailMode: "fallback", bikEmailFrom: { not: null }, bikKeyEnc: { not: null } } });
   for (const settings of shops) {
     if (!emailReady(settings)) continue;
