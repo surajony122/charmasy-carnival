@@ -241,3 +241,27 @@ export async function updateCodeWindow(admin, code, startsAt, endsAt) {
     return { ok: false, error: String(e.message || e) };
   }
 }
+
+// Writes the winner's prize onto the order (metafield carnival.prize) so the customer-account "Your prize" card can show it.
+// The definition makes the field readable by the customer in their account; it is created once per server start.
+let prizeDefinitionDone = false;
+export async function setOrderPrize(admin, orderGid, payload) {
+  if (!admin || !orderGid) return { ok: false, error: "no order" };
+  try {
+    if (!prizeDefinitionDone) {
+      const d = await gql(admin,
+        `#graphql\nmutation d($def: MetafieldDefinitionInput!) { metafieldDefinitionCreate(definition: $def) { createdDefinition { id } userErrors { code message } } }`,
+        { def: { name: "Carnival prize", namespace: "carnival", key: "prize", type: "json", ownerType: "ORDER", access: { customerAccount: "READ" } } });
+      const errs = d?.data?.metafieldDefinitionCreate?.userErrors || [];
+      if (!errs.length || errs.every((e) => /TAKEN|already/i.test(`${e.code} ${e.message}`))) prizeDefinitionDone = true;
+      else console.error("Prize metafield definition:", JSON.stringify(errs));
+    }
+    const r = await gql(admin,
+      `#graphql\nmutation s($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { metafields { id } userErrors { message } } }`,
+      { m: [{ ownerId: orderGid, namespace: "carnival", key: "prize", type: "json", value: JSON.stringify(payload) }] });
+    const e = r?.data?.metafieldsSet?.userErrors || [];
+    return e.length ? { ok: false, error: e[0].message } : { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}

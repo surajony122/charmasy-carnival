@@ -4,7 +4,7 @@ import prisma from "../db.server";
 import { existsSync, readFileSync } from "node:fs";
 import { buildPage } from "../carnival-page";
 import { notifyOmnisend, omnisendConfigured, resolveKey } from "../carnival/omnisend.server";
-import { bikReady, deliver, winMessage, giftMessage, cleanLanding } from "../carnival/bik.server";
+import { bikReady, deliver, winMessage, giftMessage, resultMessage, cleanLanding } from "../carnival/bik.server";
 import { buildGiftPage } from "../carnival/gift-page";
 import { emailReady, notifyEmail } from "../carnival/email.server";
 import { randomBytes } from "node:crypto";
@@ -12,7 +12,7 @@ import {
   GAME_NAMES, activeGameFor, getSettings, loadGame, openPrizes, rollOutcome, prizeForPlay, withLock, couponWindow, lastDayText, startDayText,
 } from "../carnival/rules.server";
 import {
-  maskEmail, normalizePhone, resolveOrder, upsertCustomer, saveWinToCustomer, createCustomerCode, addFreeProductToOrder, packGiftWithOrder,
+  maskEmail, normalizePhone, resolveOrder, upsertCustomer, saveWinToCustomer, createCustomerCode, addFreeProductToOrder, packGiftWithOrder, setOrderPrize,
 } from "../carnival/shopify-ops.server";
 
 // The build step combines the game files into one file; fall back to the separate files if it is missing.
@@ -275,9 +275,20 @@ async function handleClaim(ctx, fd) {
     data: {
       email, phone, couponCode: code, delivery, deliveryNote: note, deliveryError: editError || null, customerId: customerGid ? customerGid.split("/").pop() : row.customerId,
       couponStartsAt: code ? win.startsAt : null, couponEndsAt: code ? win.endsAt : null,
-      giftToken: prize.kind === "FREE_PRODUCT" ? makeToken() : null, orderStatusUrl: order?.statusUrl || null, orderName: order?.name || null,
+      giftToken: makeToken(), orderStatusUrl: order?.statusUrl || null, orderName: order?.name || null,
     },
   });
+  // the prize on the order itself, for the customer-account "Your prize" card
+  if (order?.gid) {
+    const base = String(settings.bikStoreUrl || "https://charmacyworld.com").replace(/\/$/, "");
+    const landing = cleanLanding(settings.bikLandingPath ?? "/collections/new-arrivals-25");
+    const fresh = await prisma.gamePlay.findUnique({ where: { orderId: playRef } });
+    setOrderPrize(admin, order.gid, {
+      kind: prize.kind === "FREE_PRODUCT" ? "free" : "coupon", label: String(row.prizeLabel || ""), delivery,
+      code: code || "", from: code ? startDayText(win.startsAt) : "", to: code ? lastDayText(win.endsAt) : "", active: code ? win.startsAt.getTime() <= Date.now() + 3600000 : true,
+      shop: code ? `${base}/discount/${encodeURIComponent(code)}${landing ? "?redirect=" + landing : ""}` : "", page: fresh?.giftToken ? `${base}/apps/carnival-games?gift=${fresh.giftToken}` : "",
+    }).then((r) => { if (!r.ok) console.error("Prize on order failed:", r.error); }).catch(() => {});
+  }
   await saveWinToCustomer(admin, customerGid, { game: row.gameId, prize: row.prizeLabel, code, delivery, order: order?.name || playRef, wonAt: new Date().toISOString() });
 
   row = await prisma.gamePlay.findUnique({ where: { orderId: playRef } });
@@ -289,12 +300,15 @@ async function handleClaim(ctx, fd) {
   if (settings.bikEmailMode === "all" && emailReady(settings) && row.email) notifyEmail(settings, row, prize.productTitle).catch(() => {});
   // WhatsApp through Bik (real wins only; Test Mode has its own test button in the admin)
   if ((settings.bikMode || "auto") === "auto") {
+    const resultOn = (settings.bikResultMode === "instead" || settings.bikResultMode === "also") && bikReady(settings, "result");
     if (!row.phone) {
       prisma.gamePlay.update({ where: { orderId: playRef }, data: { waStatus: "skipped", waError: "No phone number on the order" } }).catch(() => {});
-    } else if (prize.kind === "FREE_PRODUCT" && bikReady(settings, "gift")) {
-      deliver(settings, row, giftMessage(settings, row, prize.productTitle)).catch(() => {});
-    } else if (prize.kind !== "FREE_PRODUCT" && row.couponCode && bikReady(settings, "win")) {
-      deliver(settings, row, winMessage(settings, row, win)).catch(() => {});
+    } else {
+      if (resultOn) deliver(settings, row, resultMessage(settings, { ...row, orderName: order?.name || row.orderName })).catch(() => {});
+      if (!(resultOn && settings.bikResultMode === "instead")) {
+        if (prize.kind === "FREE_PRODUCT" && bikReady(settings, "gift")) deliver(settings, row, giftMessage(settings, row, prize.productTitle)).catch(() => {});
+        else if (prize.kind !== "FREE_PRODUCT" && row.couponCode && bikReady(settings, "win")) deliver(settings, row, winMessage(settings, row, win)).catch(() => {});
+      }
     }
   }
   return claimView(row, { unique, days, notifyBtn: !adminTest && omnisendConfigured(settings) && settings.omnisendMode === "button" });
@@ -381,10 +395,15 @@ async function giftPage(ctx, token) {
   if (!row) page = buildGiftPage({ assets, found: false });
   else {
     const prize = await prizeForPlay(ctx.shop, row);
+    const coupon = row.prizeKind !== "FREE_PRODUCT";
+    const landing = cleanLanding(ctx.settings.bikLandingPath ?? "/collections/new-arrivals-25");
     page = buildGiftPage({
-      assets, found: true, title: prize?.productTitle || String(row.prizeLabel || "").replace(/^FREE\s+/i, ""), image: prize?.imageUrl || "",
+      assets, found: true, kind: coupon ? "coupon" : "free", title: coupon ? String(row.prizeLabel || "your coupon") : (prize?.productTitle || String(row.prizeLabel || "").replace(/^FREE\s+/i, "")), image: prize?.imageUrl || "",
       delivery: row.delivery, orderName: row.orderName || "your order", code: row.couponCode,
-      validTill: row.couponEndsAt ? lastDayText(row.couponEndsAt) : "", statusUrl: row.orderStatusUrl, shopUrl: "/",
+      validTill: row.couponEndsAt ? lastDayText(row.couponEndsAt) : "",
+      activeFrom: row.couponStartsAt && row.couponStartsAt.getTime() > Date.now() + 3600000 ? startDayText(row.couponStartsAt) : "",
+      statusUrl: row.orderStatusUrl, shopUrl: "/",
+      shopLink: coupon && row.couponCode && !(row.couponStartsAt && row.couponStartsAt.getTime() > Date.now() + 3600000) ? `/discount/${row.couponCode}${landing ? "?redirect=" + landing : ""}` : (landing || "/"),
     });
   }
   return new Response(page, { headers: { "Content-Type": "application/liquid", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });

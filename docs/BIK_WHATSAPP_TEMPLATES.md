@@ -73,3 +73,24 @@ Body sample: {{1}} `CMC Baked Illuminator`
 ---------------------------------------------------------------------
 
 After Meta approves them, copy each template's ID from Bik > Templates and paste it into the app (Games & prizes > WhatsApp via Bik).
+
+---------------------------------------------------------------------
+
+## 4. carnival_result_ready  (OPTIONAL - a neutral notice, category UTILITY)
+
+Idea: a plain message about the customer's own game result for their own order, with NO offer wording in the message.
+The prize (code, dates) is behind the button, on the prize page. Meta decides the category itself; if it re-labels it
+Marketing, nothing is lost (same limits as the other templates). Do not use words like win, prize, coupon, discount, offer, free.
+
+Category: Utility. Header: none (text only). Footer: `Charmacy Milano`
+
+Body:
+```
+Hi, your Charmacy Carnival game result for order {{1}} is ready. You can see it any time with the button below.
+```
+Body sample: {{1}} `#314462`
+
+Button: Visit website (dynamic URL) - label `View my result` - URL `https://charmacyworld.com/apps/carnival-games?gift={{1}}` - sample `a8Kd92LmQx4Tz7Pw`
+
+In the app: Games & prizes > WhatsApp via Bik > "Your result is ready" notice template id, then choose
+"instead of" or "as well as" the win / gift message.

@@ -18,7 +18,7 @@ export function bikCreds(settings) {
 }
 export const bikHint = (settings) => { const c = bikCreds(settings); return c ? "…" + c.key.slice(-4) : ""; };
 export function bikReady(settings, kind = "win") {
-  const id = kind === "reminder" ? settings?.bikReminderTemplate : kind === "gift" ? settings?.bikGiftTemplate : settings?.bikWinTemplate;
+  const id = kind === "reminder" ? settings?.bikReminderTemplate : kind === "gift" ? settings?.bikGiftTemplate : kind === "result" ? settings?.bikResultTemplate : settings?.bikWinTemplate;
   return !!(bikCreds(settings) && id && ["auto", "consent"].includes(settings.bikMode || "auto"));
 }
 
@@ -90,7 +90,11 @@ export const reminderMessage = (settings, play, w, now = Date.now()) => ({
   body: [play.prizeLabel, play.couponCode, lastDayText(w.endsAt), String(Math.max(1, Math.ceil((w.endsAt.getTime() - now) / 86400000)))],
   button: codeButtons(play.couponCode, settings), callbackData: { play: play.orderId, kind: "reminder" },
 });
-export const giftMessage = (settings, play, title) => ({ to: play.phone, templateId: settings.bikGiftTemplate, body: [title || "gift"], button: [{ type: "URL", index: 0, data: play.giftToken }], callbackData: { play: play.orderId, kind: "gift" } });
+// The prize page link for the button: the full link (default) or just the token, like the coupon button.
+const prizeLink = (settings, token) => (settings.bikUrlFull === false ? token : `${storeBase(settings.bikStoreUrl)}/apps/carnival-games?gift=${token}`);
+export const giftMessage = (settings, play, title) => ({ to: play.phone, templateId: settings.bikGiftTemplate, body: [title || "gift"], button: [{ type: "URL", index: 0, data: prizeLink(settings, play.giftToken) }], callbackData: { play: play.orderId, kind: "gift" } });
+// Neutral "your result is ready" notice: nothing promotional in the message itself; the prize is behind the button.
+export const resultMessage = (settings, play) => ({ to: play.phone, templateId: settings.bikResultTemplate, body: [play.orderName || "your order"], button: [{ type: "URL", index: 0, data: prizeLink(settings, play.giftToken) }], callbackData: { play: play.orderId, kind: "result" } });
 
 // Sends and records the result on the play row. Never throws.
 export function deliver(settings, play, msg, { reminder = false, at = null } = {}) {
