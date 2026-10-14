@@ -73,13 +73,22 @@ export const loader = async ({ request }) => {
       day, orders: orders[i], plays: p.length, wins: p.filter((x) => x.outcomeWin).length, claimed: claimed.length,
       noPhone: claimed.filter((x) => !x.phone).length, handed: l.length,
       delivered: l.filter((x) => x.status === "delivered" || x.status === "read").length, failed: l.filter((x) => x.status === "failed").length,
+      waiting: l.filter((x) => x.status === "accepted" || x.status === "sent").length,
       noMessage: claimed.filter((x) => x.phone && !x.waStatus).length,
     };
   });
+  // Why messages failed: the same reason text counted (numbers and codes folded together so similar reasons group)
+  const reasonMap = new Map();
+  for (const l of logs) {
+    if (l.status !== "failed" || l.kind === "test") continue;
+    const key = String(l.error || "No reason given").replace(/\+?\d[\d\s-]{6,}/g, "<number>").replace(/wamid\.\S+/g, "<id>").slice(0, 160);
+    reasonMap.set(key, (reasonMap.get(key) || 0) + 1);
+  }
+  const reasons = [...reasonMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([reason, n]) => ({ reason, n }));
   const count = (st) => items.filter((i) => i.status === st).length;
   return json({
     items, counts: { total: items.length, accepted: count("accepted"), sent: count("sent"), delivered: count("delivered"), read: count("read"), failed: count("failed") },
-    funnel, hookUrl: `${appUrl()}/webhooks/bik?shop=${shop}`,
+    funnel, reasons, hookUrl: `${appUrl()}/webhooks/bik?shop=${shop}`,
     hasKey: !!(settings && settings.bikWebhookKeyEnc && decryptKey(settings.bikWebhookKeyEnc)),
     hook: settings && settings.bikHookLastAt ? { at: new Date(settings.bikHookLastAt.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " "), result: settings.bikHookLastResult || "" } : null,
   });
@@ -90,7 +99,7 @@ const LABEL = { accepted: "Handed to Bik", sent: "Sent", delivered: "Delivered",
 const KIND = { win: "Win", reminder: "Reminder", gift: "Free gift", test: "Test", email: "Email" };
 
 export default function WhatsAppLogs() {
-  const { items, counts, hookUrl, hasKey, hook, funnel } = useLoaderData();
+  const { items, counts, hookUrl, hasKey, hook, funnel, reasons } = useLoaderData();
   const result = useActionData();
   const submit = useSubmit();
   const busy = useNavigation().state === "submitting";
@@ -143,12 +152,21 @@ export default function WhatsAppLogs() {
             <Text as="h2" variant="headingMd">Where customers drop out, day by day</Text>
             <Text as="p" variant="bodySm" tone="subdued">Orders in Shopify → opened the game and played → won → claimed the prize → had a phone number → message handed to Bik → delivered. "Claimed, no message" means a winner with a phone for whom no message was tried.</Text>
             <DataTable
-              columnContentTypes={["text", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric"]}
-              headings={["Day", "Orders", "Played", "Won", "Claimed", "No phone", "Claimed, no message", "Handed to Bik", "Delivered / read", "Failed"]}
-              rows={funnel.map((f) => [f.day, f.orders ?? "?", f.plays, f.wins, f.claimed, f.noPhone, f.noMessage, f.handed, f.delivered, f.failed])}
+              columnContentTypes={["text", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric"]}
+              headings={["Day", "Orders", "Played", "Won", "Claimed", "No phone", "Claimed, no message", "Handed to Bik", "Delivered / read", "Waiting for Bik", "Failed"]}
+              rows={funnel.map((f) => [f.day, f.orders ?? "?", f.plays, f.wins, f.claimed, f.noPhone, f.noMessage, f.handed, f.delivered, f.waiting, f.failed])}
             />
           </BlockStack>
         </Card>
+
+        {reasons.length ? (
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h2" variant="headingMd">Why messages failed</Text>
+              <DataTable columnContentTypes={["numeric", "text"]} headings={["Messages", "Reason (as Bik or WhatsApp reported it)"]} rows={reasons.map((r) => [r.n, r.reason])} />
+            </BlockStack>
+          </Card>
+        ) : null}
 
         <Card>
           <BlockStack gap="300">
