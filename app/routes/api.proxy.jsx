@@ -388,6 +388,12 @@ export const action = async ({ request }) => {
 };
 
 /* ---------------- the page ---------------- */
+// "work from 1 Nov to 30 Nov 2026" / "valid till 30 Nov 2026" for the rules line on the game page
+function couponTextFor(settings) {
+  const w = couponWindow(settings, { testMode: false });
+  return w.startsAt.getTime() > Date.now() + 3600000 ? `work from ${startDayText(w.startsAt)} to ${lastDayText(w.endsAt)}` : `are valid till ${lastDayText(w.endsAt)}`;
+}
+
 async function giftPage(ctx, token) {
   const assets = (process.env.SHOPIFY_APP_URL || "https://charmasy-carnival.onrender.com").replace(/\/$/, "") + "/carnival";
   const row = ctx.shop && token.length >= 12 ? await prisma.gamePlay.findFirst({ where: { giftToken: token, shop: ctx.shop } }) : null;
@@ -433,7 +439,7 @@ export const loader = async ({ request }) => {
     version,
     bundled: BUNDLED,
     css: CSS,
-    cfg: { orderId, customerId, orderBadge, initialGame, isTest, activeGame, shopPath: cleanLanding(ctx.settings.bikLandingPath ?? "/collections/new-arrivals-25") || "/collections/all", testPrize: ctx.adminTest && url.searchParams.get("testprize") === "free" ? "free" : "" },
+    cfg: { orderId, customerId, orderBadge, initialGame, isTest, activeGame, couponText: couponTextFor(ctx.settings), shopPath: cleanLanding(ctx.settings.bikLandingPath ?? "/collections/new-arrivals-25") || "/collections/all", testPrize: ctx.adminTest && url.searchParams.get("testprize") === "free" ? "free" : "" },
   });
   return new Response(html, { headers: { "Content-Type": "application/liquid" } });
 };

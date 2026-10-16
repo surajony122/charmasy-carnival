@@ -698,11 +698,13 @@
     }
   }
 
+  var REWARD = "Win a 5% / 10% OFF or ₹50 / ₹100 OFF coupon, or a free gift";
+
   function setInfo(id) {
     var m = META[id];
     els.title.textContent = m.title;
     els.tips.innerHTML = m.tips.map(function (t, i) { return "<li><b>" + (i + 1) + "</b>" + esc(t) + "</li>"; }).join("");
-    els.reward.textContent = "🎁 " + m.reward;
+    els.reward.textContent = "🎁 " + REWARD;
     renderSide(id);
   }
 
@@ -716,8 +718,9 @@
           var gift = p.kind === "FREE_PRODUCT";
           return '<li>' + (gift && p.image ? '<img src="' + esc(p.image) + '" alt="">' : '<span class="pi">' + (gift ? "🎁" : "🏷️") + '</span>') + '<span>' + esc(p.label) + '</span></li>';
         }).join("")
-      : '<li><span class="pi">🎁</span><span>' + esc(m.reward.replace(/^Win (a |an )?/i, "")) + '</span></li>';
+      : '<li><span class="pi">🏷️</span><span>5% or 10% OFF coupon</span></li><li><span class="pi">🏷️</span><span>₹50 or ₹100 OFF coupon</span></li><li><span class="pi">🎁</span><span>A free gift</span></li>';
     var days = (PLAY && PLAY.days) || 7;
+    var couponText = (window.CARNIVAL && window.CARNIVAL.couponText) || ("are valid for " + days + " days");
     els.side.innerHTML =
       '<div class="side-card">' +
       '<div class="eyebrow">GAME ' + curId + ' OF 9 · ' + m.day + ' OCT</div>' +
@@ -728,7 +731,7 @@
       (feat ? '<div class="feat"><img src="' + esc(feat.image) + '" alt=""><div><b>' + esc(feat.label.replace(/^FREE\s*/i, "")) + '</b><small>Free gift</small>' +
         (feat.url ? '<a href="' + esc(feat.url) + '" target="_blank" rel="noopener">Meet the product ↗</a>' : "") + '</div></div>' : "") +
       '<div class="side-next">' + nextTimerHtml() + '</div>' +
-      '<ul class="rules"><li>One order = one play.</li><li>Coupons are single-use and valid for ' + days + ' days.</li><li>Free gifts are added to your order automatically.</li></ul>' +
+      '<ul class="rules"><li>One order = one play.</li><li>Coupons are single-use and ' + esc(couponText) + '.</li><li>Free gifts are added to your order automatically.</li></ul>' +
       '</div>';
     tickClocks();
   }
